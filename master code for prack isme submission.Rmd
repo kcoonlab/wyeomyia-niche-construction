@@ -1,0 +1,496 @@
+---
+title: "master code for prack isme submission"
+author: "Aldo A. Arellano"
+date: "2024-11-18"
+output: html_document
+---
+
+
+
+
+**Larval passaging data analysis**
+DELETE THIS
+```{r}
+seq_object = readRDS("c:/Users/aldoa/OneDrive/Desktop/Larval_Passaging_Analysis_AA/Analysis/gg2 taxonomy/phyloseq/final LP phyloseq")
+```
+
+
+Raw sequence handling presented for larval passaging data (other raw data handled analogously):
+```{bash}
+# sample code at the command-line for installing qiime2 with conda:
+conda env create -n qiime2-amplicon-2024.5 --file https://data.qiime2.org/distro/amplicon/qiime2-amplicon-2024.5-py39-linux-conda.yml
+
+# begin by activating conda environment 
+conda activate qiime2-amplicon-2024.5
+```
+
+```{bash}
+# created directory called qiime_intermediates at '[YOUR WORKING DIRECTORY]/qiime_intermediates'
+# no quotations in directory when specifying at the command line
+mkdir qiime_intermediates
+# the object that is the demultiplexed paired end 'artifact' is called demux-paired-end.qza
+qiime tools import --type 'SampleData[PairedEndSequencesWithQuality]' --input-path "[LOCATION OF READS]" --input-format CasavaOneEightSingleLanePerSampleDirFmt --output-path "[YOUR WORKING DIRECTORY]"/qiime_intermediates/demux-paired-end.qza
+
+cd larval_passaging/qiime_intermediates
+qiime demux summarize --i-data ./demux-paired-end.qza --o-visualization demux-paired-end.qzv
+```
+
+```{bash}
+# read-joining 
+qiime vsearch merge-pairs --i-demultiplexed-seqs demux-paired-end.qza --o-merged-sequences demux-joined.qza --o-unmerged-sequences demux-unjoined.qza 
+# visualize how many reads from fwd and rev could be joined...only keeping those that join 
+qiime demux summarize --i-data demux-joined.qza --o-visualization demux-joined.qzv
+# filtering based on quality scores to begin to deal with chimeric regions and incorrect base calls
+qiime quality-filter q-score --i-demux demux-joined.qza --o-filtered-sequences demux-joined-filtered.qza --o-filter-stats demux-joined-filter-stats.qza
+# running deblur for further de-noising 
+qiime deblur denoise-16S   --i-demultiplexed-seqs demux-joined-filtered.qza   --p-trim-length 250   --p-sample-stats   --o-representative-sequences rep-seqs.qza   --o-table table.qza   --o-stats deblur-stats.qza
+# tabulate sequences
+qiime feature-table summarize   --i-table table.qza   --o-visualization table.qzv
+# stats for what sequences passed all the denoising steps:
+qiime deblur visualize-stats   --i-deblur-stats deblur-stats.qza   --o-visualization deblur-stats.qzv
+# visualization
+qiime feature-table tabulate-seqs   --i-data rep-seqs.qza   --o-visualization rep-seqs.qzv
+# generate a tree
+qiime phylogeny align-to-tree-mafft-fasttree   --i-sequences rep-seqs.qza   --o-alignment aligned-rep-seqs.qza   --o-masked-alignment masked-aligned-rep-seqs.qza   --o-tree unrooted-tree.qza   --o-rooted-tree rooted-tree.qza
+```
+
+```{bash}
+# install greengenes2 if needed
+pip install q2-greengenes2
+# grab the reference database
+wget http://ftp.microbio.me/greengenes_release/2022.10/2022.10.backbone.full-length.fna.qza
+wget http://ftp.microbio.me/greengenes_release/2022.10/2022.10.backbone.tax.qza
+# extract reads from full length greengenes2 database '2022.10.backbone.full-length.fna.qza' using EMP primers (V4 region)
+qiime feature-classifier extract-reads --i-sequences 2022.10.backbone.full-length.fna.qza --p-f-primer GTGCCAGCMGCCGCGGTAA --p-r-primer GGACTACHVGGGTWTCTAAT --o-reads ref-seqs-ggkozich.qza
+# train naive-bayes classifier
+qiime feature-classifier fit-classifier-naive-bayes --i-reference-reads ref-seqs-ggkozich.qza --i-reference-taxonomy ./2022.10.backbone.tax.qza --o-classifier classifier-gg2kozich.qza
+# similarly this can take some RAM: using your trained classifier to assign taxonomy to your sample reads
+qiime feature-classifier classify-sklearn --i-classifier classifier-gg2kozich.qza --i-reads rep-seqs.qza --o-classification gg2-taxonomy.qza
+```
+
+```{bash}
+# make a directory to put in the stuff qiime2 generates that will be used in later analysis
+mkdir phyloseq
+# what will become the otu table, gets output as biom file which will be converted
+qiime tools export --input-path table.qza --output-path ./phyloseq/
+# convert biom to tsv
+biom convert -i phyloseq/feature-table.biom -o phyloseq/otu_table.tsv --to-tsv
+# export taxonomy to tsv
+qiime tools export --input-path gg2-taxonomy.qza --output-path phyloseq
+# export tree from above
+qiime tools export --input-path unrooted-tree.qza --output-path phyloseq
+# all tsvs will need to be converted to csvs and curated to match expected input coming up for phyloseq...this just entails some minor formatting such as deleting extra rows in the otu table  and the first column of the taxonomy and otu tables being "OTU" 
+# I also manually split the taxonomy levels in the taxonomy file and remove prefixes placed by the database
+```
+
+With .csvs in hand we move to R for the remainder of the analyses
+Here are all the libraries used:
+```{r}
+library(ape)
+library(magrittr)
+library(data.table)
+library(phytools)
+library(xfun)
+library(decontam)
+library(phyloseq)
+library(ggplot2)
+library(breakaway)
+library(DivNet)
+library(dplyr)
+library(cowplot)
+library(wesanderson)
+library(RColorBrewer)
+library(beanplot)
+library(vegan)
+library(ranacapa)
+# library(ggpubr)
+# library(facetscales)
+library(gridExtra)
+library(reshape)
+library(grid)
+library(viridis)
+library(pander)
+library(gplots)
+library(VennDiagram)
+library(ALDEx2)
+library(tidyverse)
+library(pander)
+library(data.table)
+library(purrr)
+library(naniar)
+library(microshades)
+library(ggh4x)
+```
+
+Tree prepping
+Re-rooting of phylogenetic tree carried out using procedure described at:
+https://github.com/joey711/phyloseq/issues/597
+```{r}
+library(phyloseq) # you will probably have to install this! This is our workhorse package for accessing our data
+library(phytools) # you will probably have to install this!
+pick_new_outgroup <- function(tree.unrooted){
+    require("magrittr")
+    require("data.table")
+    require("ape") # ape::Ntip
+    # tablify parts of tree that we need.
+    treeDT <-
+      cbind(
+        data.table(tree.unrooted$edge),
+        data.table(length = tree.unrooted$edge.length)
+      )[1:Ntip(tree.unrooted)] %>%
+      cbind(data.table(id = tree.unrooted$tip.label))
+    # Take the longest terminal branch as outgroup
+    new.outgroup <- treeDT[which.max(length)]$id
+    return(new.outgroup)
+}
+# read-in our newick formatted tree from qiime
+unrooted_qiime_default<-read.newick(file="[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/tree.nwk")
+new.outgroup = pick_new_outgroup(unrooted_qiime_default)
+rootedTree = ape::root(unrooted_qiime_default, outgroup=new.outgroup, resolve.root=TRUE)
+# this will be the phy_tree part of our phyloseq object
+phy_tree<-read_tree(rootedTree, errorIfNULL=FALSE)
+```
+
+Next we need the otu_table, tax_table, and sample_data parts of our phyloseq object (counts for ASVs per sample, taxonomic assignment, and metadata):
+```{r}
+otu_csv<-read.csv("[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/otu_table.csv")
+otu_rows_fixed <- data.frame(otu_csv, row.names = 1)
+OTU_16S<-otu_table(otu_rows_fixed,taxa_are_rows = TRUE)
+
+tax_csv<-read.csv("[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/taxonomy.csv")
+tax_rows_fixed<-data.frame(tax_csv, row.names = 1)
+tax_matrix<-as.matrix(tax_rows_fixed)
+TAX_16S<-tax_table(tax_matrix, errorIfNULL=TRUE)
+
+meta_csv<-read.csv("[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/16s_metadata.csv")
+meta_rows<-data.frame(meta_csv, row.names = 1)
+META_16S<-sample_data(meta_rows)
+```
+
+Save initial phyloseq!
+```{r}
+seq_object<-phyloseq(OTU_16S,TAX_16S,META_16S,phy_tree)
+saveRDS(seq_object,"[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/initial_phyloseq")
+seq_object<-readRDS("[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/initial_phyloseq")
+```
+
+Package `decontam` used for sample decontamination, see:
+https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-018-0605-2 see also:
+https://benjjneb.github.io/decontam/vignettes/decontam_intro.html
+
+Inspect library size
+```{r}
+df <- as.data.frame(sample_data(seq_object)) # Put sample_data into a ggplot-friendly data.frame
+df$LibrarySize <- sample_sums(seq_object)
+df <- df[order(df$LibrarySize),]
+df$Index <- seq(nrow(df))
+ggplot(data=df, aes(x=Index, y=LibrarySize, color=Sample_Control)) + geom_point()
+```
+
+Prevalence-based contaminant assignment 
+```{r}
+sample_data(seq_object)$is.neg <- sample_data(seq_object)$Sample_Control == "Control"
+
+#this threshold can be modified depending on desired sensitivity (see docs above)
+contamdf.prev05 <- isContaminant(seq_object, method="prevalence", neg="is.neg", threshold=0.5)
+table(contamdf.prev05$contaminant)
+
+ps.pa <- transform_sample_counts(seq_object, function(abund) 1*(abund>0))
+ps.pa.neg <- prune_samples(sample_data(ps.pa)$Sample_Control == "Control", ps.pa)
+ps.pa.pos <- prune_samples(sample_data(ps.pa)$Sample_Control == "True Sample", ps.pa)
+# Make data.frame of prevalence in positive and negative samples
+df.pa <- data.frame(pa.pos=taxa_sums(ps.pa.pos), pa.neg=taxa_sums(ps.pa.neg),
+                      contaminant=contamdf.prev05$contaminant)
+b<-ggplot(data=df.pa, aes(x=pa.neg, y=pa.pos, color=contaminant)) + geom_point() +
+  xlab("Prevalence  (Controls)") + ylab("Prevalence (True Samples)") +theme_cowplot() + theme(panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank())
+
+# take a look at how frequently those ASVs called as contaminants are seen in your real samples! good to remove them! 
+b
+
+# make a data frame of the contaminant reads
+prev<-contamdf.prev05[which(contamdf.prev05$contaminant=='TRUE'),]
+prev<-rownames_to_column(prev,var="ASV")
+ps.noncontam <- prune_taxa(!contamdf.prev05$contaminant, seq_object)
+```
+
+Frequency-based contaminant assignment
+```{r}
+contamdf.freq <- isContaminant(ps.noncontam, method="frequency", conc="Library_quant")
+head(contamdf.freq)
+table(contamdf.freq$contaminant)
+
+PITCHER_CONTAMINANT_freq<-contamdf.freq[which(contamdf.freq$contaminant=='TRUE'),]
+
+ps.noncontam <- prune_taxa(!contamdf.freq$contaminant, ps.noncontam)
+```
+
+Sanity check: how do putative contaminant reads look?
+```{r}
+# what proportion of reads do putative 'contaminants' comprise?
+# all contaminants pooled
+df_tax<-as.data.frame(tax_table(seq_object)) # extract taxonomy from your phyloseq object as a dataframe
+
+df_tax$contaminant_status <- "not contaminant" # label those called contaminant by prevalence
+df_tax$contaminant_status[rownames(df_tax) %in% duffy_prev$ASV] <- "contaminant"
+
+tax_matrix<-as.matrix(df_tax) # convert back to phyloseq style
+TAX_16S<-tax_table(tax_matrix, errorIfNULL=TRUE)
+
+phyloseq_for_contaminant_rel_abund_pooled<-phyloseq(sample_data(seq_object), otu_table(seq_object), TAX_16S, phy_tree(seq_object))
+
+ps.norm = transform_sample_counts(phyloseq_for_contaminant_rel_abund_pooled, function(x) x / sum(x) ) # convert raw counts to relative abundance
+melted<-psmelt(ps.norm) # melt you phyloseq object
+plot<-melted%>% # plot!
+    ggplot(aes(x=Sample, y=Abundance, fill=contaminant_status))+
+    geom_col() +
+     xlab("Sample")+ ylab("Proportion of Reads")+
+  facet_grid(.~Water_Larvae, scales = "free_x", space = "free") + 
+    theme_cowplot() + theme(text = element_text(size=15)) + scale_y_continuous(expand = c(0,0)) + theme(axis.text.x = element_text(angle= 90, size=15), axis.text.y = element_text(size=15)) + scale_fill_manual(values= c("grey50","#8cd752"))
+plot$labels$fill<-"Contaminant status"
+plot
+
+# each contaminant separately
+for (contaminant in duffy_prev$ASV) {
+  
+  temp<-melted %>% filter(OTU==contaminant)
+
+  temp_plot<- temp%>%
+    ggplot(aes(x=Sample, y=Abundance, fill=contaminant_status))+
+    geom_col() +
+     xlab("Sample")+ ylab("Proportion of Reads")+ ggtitle(contaminant)+
+  facet_grid(.~Water_Larvae, scales = "free_x", space = "free") + 
+    theme_cowplot() + theme(text = element_text(size=15)) + scale_y_continuous(expand = c(0,0)) + theme(axis.text.x = element_text(angle= 90, size=15), axis.text.y = element_text(size=12)) + scale_fill_manual(values= c("grey50","#8cd752"))
+temp_plot$labels$fill<-"Contaminant status"
+print(temp_plot)
+}
+```
+
+Save new object and modify taxonomy so unclassified ASVs are reported to most resolved taxonomic level available
+```{r}
+saveRDS(ps.noncontam,"[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/final LP phyloseq")
+seq_object = readRDS("[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/final LP phyloseq")
+
+library(tidyverse)
+tax <- data.frame(tax_table(seq_object))
+for (i in 1:7){ tax[,i] <- as.character(tax[,i])}
+####### Fills holes in the tax table
+tax[is.na(tax)] <- ""
+for (i in 1:nrow(tax)){
+  if (tax[i,2] == ""){
+kingdom <- paste("Kingdom_", tax[i,1], sep = "")
+tax[i, 2:7] <- kingdom
+} else if (tax[i,3] == ""){
+phylum <- paste("Phylum_", tax[i,2], sep = "")
+tax[i, 3:7] <- phylum
+} else if (tax[i,4] == ""){
+class <- paste("Class_", tax[i,3], sep = "")
+tax[i, 4:7] <- class
+} else if (tax[i,5] == ""){
+order <- paste("Order_", tax[i,4], sep = "")
+tax[i, 5:7] <- order
+} else if (tax[i,6] == ""){
+family <- paste("Family_", tax[i,5], sep = "")
+tax[i, 6:7] <- family
+} else if (tax[i,7] == ""){
+tax$Species[i] <- paste("Genus",tax$Genus[i], sep = "_")
+}
+}
+# replace tax_table with this nicer one
+tax_table(seq_object) <- as.matrix(tax)
+
+
+greater_than_100_ASVs <- prune_samples(sample_sums(seq_object)>=100, seq_object)
+no_controls<-prune_samples(sample_data(greater_than_100_ASVs)$Sample_Control == "True Sample", greater_than_100_ASVs)
+no_controls<-subset_taxa(no_controls, Class!="Chloroplast")
+no_controls<-subset_taxa(no_controls, Family!="Mitochondria")
+seq_object<-prune_samples(sample_data(no_controls)$Treatment != "CONTROL", no_controls)
+
+saveRDS(seq_object,"[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/final LP phyloseq")
+seq_object = readRDS("[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/final LP phyloseq")
+```
+
+What are the dominant taxa present in the dataset?
+```{r}
+phylum_glom<-tax_glom(seq_object, taxrank="Phylum", NArm=TRUE, bad_empty=c(NA, "", " ", "\t"))
+phylum_glom_df<-as.data.frame(as.matrix(tax_table(phylum_glom)))
+
+# make a list of all the phyla to loop through
+list<-as.list(unique(phylum_glom_df$Phylum))
+
+df<-data.frame(0,0,0)
+colnames(df)<-c("Phylum","Unique ASVs","Total Reads")
+count<-1
+
+for (taxon in list) {
+  temp_phy_object<- subset_taxa(seq_object, Phylum== taxon)
+  unique_ASVs<- nrow(as.data.frame(as.matrix(tax_table(temp_phy_object))))
+  sum<-sum(sample_sums(temp_phy_object))
+ 
+  df[count,1]<-taxon
+  df[count,2]<- unique_ASVs
+  df[count,3]<- sum
+  
+  count<- count+1
+}
+df_ordered<- df[order(-df$`Total Reads`),]
+# this dataframe should let you know how many ASVs are associated with each phyla in your dataset and give you an idea of how many reads got assigned to each of these groups
+df_ordered$relative_read_abundance<-df_ordered$`Total Reads`/sum(df_ordered$`Total Reads`)
+df_ordered
+```
+
+Initial taxonomic visualization using microshades:
+```{r}
+seq_object<-prune_samples(sample_data(seq_object)$Treatment !="stock", seq_object)
+sample_data(seq_object)$new_type<-sample_data(seq_object)$Treatment
+
+temp_phyloseq_df<-as.data.frame(as.matrix(sample_data(seq_object)))
+
+temp_phyloseq_df<-temp_phyloseq_df %>%
+     mutate(new_type = dplyr::recode(new_type,`L0`= "Uncolonized",
+         `L2` = "Field colonization",
+         `L10` = "High colonization"))
+
+temp_phyloseq_df<-temp_phyloseq_df %>%
+     mutate(Timepoint = dplyr::recode(Timepoint, 
+      `48hr` = "48-hr",
+      `12Day` = "12-day"))
+
+meta_16s<-sample_data(temp_phyloseq_df)
+
+temp<-phyloseq(otu_table(seq_object), meta_16s,tax_table(seq_object))
+
+sample_data(temp)$new_type<-factor(sample_data(temp)$new_type, levels=c("Uncolonized", "Field colonization","High colonization"))
+sample_data(temp)$Water_Larvae<-factor(sample_data(temp)$Water_Larvae, levels=c("water","larvae"))
+sample_data(temp)$Timepoint<-factor(sample_data(temp)$Timepoint, levels=c("48-hr","12-day"))
+
+mdf_prep <- prep_mdf(temp, remove_na = TRUE)
+color_obj <- microshades::create_color_dfs(mdf_prep, group_level= "Phylum", subgroup_level= "Genus", selected_groups = c(" Proteobacteria", " Actinobacteriota", " Bacteroidota", " Firmicutes_A"))
+
+mdf <- color_obj$mdf
+cdf <- color_obj$cdf
+
+plot <- microshades::plot_microshades(mdf, cdf)
+legend <-custom_legend(mdf, cdf, subgroup_level = "Genus")
+
+plot_diff<-plot + scale_y_continuous(labels = scales::percent, expand = expansion(0)) +
+  theme(legend.position = "none")  +
+  facet_nested(~new_type+Water_Larvae+Timepoint, scales = "free_x", space="free_x",nest_line = element_line(colour = "black")) +
+  theme(axis.text.x = element_blank()) + 
+  theme(plot.margin = margin(6,20,6,6)) + xlab("Sample") +
+  theme(ggh4x.facet.nestline = element_line(linetype = 3))
+
+larval_pass<-plot_grid(plot_diff, legend,  rel_widths = c(1, .25))
+larval_pass
+```
+
+Visual determination of saturation - all saturate in this case
+```{r}
+rarefaction<-ranacapa::ggrare(seq_object, step = 1000, color = "Water_Larvae", se = FALSE, plot = FALSE)
+r<-rarefaction + facet_wrap(~Timepoint) +  geom_line(size=1) + coord_cartesian(xlim =c(0, 5000), ylim = c(0, 75)) + theme_cowplot() + theme(panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank())
+r
+```
+
+Generate summary diversity data
+```{r}
+a<-plot_richness(seq_object, x = "samples", measures="Observed")
+summary<-a$data
+ observed<-summary[,c(4,6,9,23:25)]
+Total_Reads<-sample_sums(seq_object)
+median(Total_Reads)
+
+f<-as.data.frame(Total_Reads)
+f<-as.data.frame(f)
+colnames(f)="Total_Reads"
+total.reads <- tibble::rownames_to_column(f, "samples")
+
+total_reads_obs<-merge(observed,total.reads)
+
+rich<-breakaway(seq_object)
+
+rich_values<-rich %>% summary %$% estimate
+rich_error<-rich %>% summary %$% error
+
+f<-as.data.frame(rich_values)
+f<-as.data.frame(f)
+colnames(f)="Breakaway Estimate of Richness"
+rich_final <- tibble::rownames_to_column(f, "samples")
+
+f<-as.data.frame(rich_error)
+f<-as.data.frame(f)
+colnames(f)="Breakaway Error"
+rich_error <- tibble::rownames_to_column(f, "samples")
+
+merged_rich<-merge(rich_final,rich_error)
+
+ # shannon<-divnet(seq_object, base= "05b1f660e73c066a9d48a8f1e728079c")
+
+shannon_estimates <- shannon$shannon %>% summary %$% estimate
+shannon_ses <- sqrt(shannon$`shannon-variance`)
+
+f<-as.data.frame(shannon_estimates)
+f<-as.data.frame(f)
+colnames(f)="Shannon Sample-Wise"
+shannon_final<- tibble::rownames_to_column(f, "samples")
+
+f<-as.data.frame(shannon_ses)
+f<-as.data.frame(f)
+colnames(f)="Shannon Error"
+shannon_error <- tibble::rownames_to_column(f, "samples")
+
+merged_shannon<-merge(shannon_final,shannon_error)
+
+merge_1<-merge(total_reads_obs,merged_rich)
+
+merge_2<-merge(merge_1,merged_shannon)
+
+ # write.csv(merge_2,"df_hypothesis_tests_larval_passaging_diversity.csv")
+
+# above csv also provided for each dataset of interest
+```
+
+
+
+
+
+
+
+Testing difference between colonized and uncolonized pitchers surveyed in the field
+```{r}
+new<-read.csv("/Users/aldoa/OneDrive/Desktop/temp field cfu survey.csv")
+
+library(ggplot2)
+library(cowplot)
+
+plot_new<-ggplot(new,aes(x= Treatment  , y=log, fill= Treatment)) + geom_boxplot(lwd=1.25, fatten = 1, alpha=1) +
+    # geom_point(position= position_jitterdodge(jitter.width = 0.3,jitter.height = 0,dodge.width = 0.75, seed = NA),shape = 21, alpha = 0.4, size = 8) +
+    theme_cowplot()+
+   theme(
+     legend.position = 0,
+  text=element_text(size=16),
+  axis.text.x=element_text(angle=90, hjust=1),
+  axis.text= element_text(size=16),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  xlab("Mosquito Background") + ylab("log(CFU/mL)")
+
+qqnorm( residuals(aov(log ~ Treatment, data= new)),pch=1,frame=FALSE)
+qqline( residuals(aov(log ~ Treatment, data= new)),lwd=1)
+plot(fitted(aov(log ~ Treatment, data= new)),
+  residuals(aov(log ~ Treatment, data= new)),xlab="fitted", 
+  ylab= "raw residual",main= "Density by Sample Type")
+  abline(h=0, lty=2)
+  plot(hist(new$log, xlab = "CFU Density"))
+
+library(car)
+  
+leveneTest(log~Treatment, data = new)
+
+model=lm( new$log ~ new$Treatment ) # run ANOVA (global test)
+ANOVA=aov(model)
+summary(model)
+
+library(tidyverse)
+library(rstatix)
+stat.test <- new %>%
+  t_test(log ~ Treatment, var.equal = TRUE)
+stat.test
+```
+
