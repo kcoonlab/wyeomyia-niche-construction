@@ -1,0 +1,2510 @@
+---
+title: "master individual oviposition analysis"
+author: "Aldo A. Arellano"
+date: "2024-02-13"
+output: html_document
+---
+
+Loading packages
+```{r}
+library(phyloseq)
+library(phytools)
+library(ggplot2)
+library(tidyverse)
+library(decontam)
+library(data.table)
+library(cowplot)
+library(ggvenn)
+library(ggeffects)
+library(lme4)
+library(ggpubr)
+library(viridis)
+```
+
+**Non-sequencing based analysis**
+
+Generate some summary information for the adult females yielding each iso-female assay
+```{r}
+individual_assays<-read.csv("C:/Users/aldoa/OneDrive/Desktop/Senior thesis/jp for individual oviposition summary draft edit.csv")
+# just subset to moms
+maternal_only<-individual_assays %>% filter(Mom_Wing_Length_mm > 2)
+# reporting the variation in maternal wing length
+wings<-ggplot(maternal_only,aes(x= Condition , y=Mom_Wing_Length_mm)) + geom_boxplot(lwd=1.25, fatten = 1, alpha=1, outlier.shape = NA) +
+    geom_point(position=position_jitter(width = 0.1, height = NULL, seed = NA) ,shape = 21, size = 4, fill= "black") +
+    theme_cowplot()+
+   theme(
+    legend.position = 0,
+  text=element_text(size=13.5),
+  axis.text= element_text(size=13.5),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank(), axis.text.x=element_blank()) +  xlab("") + ylab("Wing Length (mm)")+
+  scale_x_discrete(guide = guide_axis(n.dodge = 2))
+
+# reporting the variation in maternal bacterial establishment
+log_cfu<-ggplot(maternal_only,aes(x= Condition , y=Log_CFU_Eggs)) + geom_boxplot(lwd=1.25, fatten = 1, alpha=1, outlier.shape = NA) +
+    geom_point(position=position_jitter(width = 0.1, height = NULL, seed = NA) ,shape = 21, size = 4, fill= "black") +
+    theme_cowplot()+
+   theme(
+    legend.position = 0,
+  text=element_text(size=13.5),
+  axis.text= element_text(size=13.5),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank(), axis.text.x=element_blank()) +  xlab("") + ylab("CFU per mL (log (10)")+
+  scale_x_discrete(guide = guide_axis(n.dodge = 2))
+
+# reporting the variation in maternal egg clutch size
+eggs_laid<-ggplot(maternal_only,aes(x= Condition , y=Tot_Eggs)) + geom_boxplot(lwd=1.25, fatten = 1, alpha=1, outlier.shape = NA) +
+    geom_point(position=position_jitter(width = 0.1, height = NULL, seed = NA) ,shape = 21, size = 4, fill= "black") +
+    theme_cowplot()+
+   theme(
+    legend.position = 0,
+  text=element_text(size=13.5),
+  axis.text= element_text(size=13.5),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank(), axis.text.x=element_blank()) +  xlab("") + ylab("Eggs laid")+
+  scale_x_discrete(guide = guide_axis(n.dodge = 2))
+
+# reporting the variation in hatch rate
+hatch_rate<-ggplot(maternal_only,aes(x= Condition , y=Hatch_Rate)) + geom_boxplot(lwd=1.25, fatten = 1, alpha=1, outlier.shape = NA) +
+    geom_point(position=position_jitter(width = 0.1, height = NULL, seed = NA) ,shape = 21, size = 4, fill= "black") +
+    theme_cowplot()+
+   theme(
+    legend.position = 0,
+  text=element_text(size=13.5),
+  axis.text= element_text(size=13.5),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank(), axis.text.x=element_blank()) +  xlab("") + ylab("Proportion eggs hatched")+
+  scale_x_discrete(guide = guide_axis(n.dodge = 2))
+```
+
+Mixed effects regressions (including trial/ maternal set as random effects) to see if binomial/ proportional responses are predicted by any of our maternal features
+```{r}
+maternal_only$Trial<-as.factor(maternal_only$Trial)
+binomial_model_hatch<-glmer(formula =  Hatch_Rate ~ Log_CFU_Eggs + Mom_Wing_Length_mm + (1|Trial),
+                   data = maternal_only,
+                   weights= Tot_Eggs, 
+                   family = binomial)
+summary(binomial_model)
+
+#### non-significant, but perhaps still biologically meaningful trend... let's make the visualization:
+binomial_bivariate_regression<-plot(ggemmeans(binomial_model_hatch,terms="Log_CFU_Eggs [all]"),show.title= FALSE, line.size=1) + theme_cowplot() + xlab("CFU per mL (log (10)") + ylab("Proportion eggs hatched") 
+
+# quick aside for the other proportional outcomes...
+
+# survival
+binomial_model_survival<-glmer(formula =  1-Died ~ Log_CFU_Eggs + Mom_Wing_Length_mm + (1|Trial),
+                   data = maternal_only,
+                   weights= Tot_Larvae,
+                   family = binomial)
+summary(binomial_model_survival)
+
+plot(ggemmeans(binomial_model_survival,terms="Log_CFU_Eggs [all]"),show.title= FALSE, line.size=1) + theme_cowplot() + xlab("CFU per mL (log 10)") + ylab("Proportion survival")
+# more early mom microbes are good for offspring survival
+
+binomial_model_pupation<-glmer(formula =  Pupated ~ Log_CFU_Eggs + Mom_Wing_Length_mm + (1|Trial),
+                   data = maternal_only,
+                   weights= Tot_Larvae, 
+                   family = binomial)
+summary(binomial_model_pupation)
+#pupation is not predicted by maternal bacterial titers, but better 'quality' females yield offspring more likely to pupate
+
+### how about when pupation happens? - nope
+day_pupation<-read.csv("C:/Users/aldoa/OneDrive/Desktop/Senior thesis_4_23_2024(1)/Senior thesis/inv_ovi_dev_day_merge_for_maternal_cfu.csv")
+day_pupation<-day_pupation[c(1:95),c(1:2)]
+individual_assays
+test<-merge(day_pupation,individual_assays)
+
+# need a nested random effect in trial here because the individual offspring in a given iso-female assay may be systematically more similar
+model<-lmerTest::lmer(formula =  pup.day ~ Log_CFU_Eggs + (1|Trial) + (1|Trial:Set.ID),
+                   data = test)
+summary(model)
+
+# does how much bacteria at the beginning predict wing length? - no
+gen_2_wings<-read.csv("C:/Users/aldoa/OneDrive/Desktop/Senior thesis_4_23_2024(1)/Senior thesis/jp for individual oviposition gen 2 wings.csv")
+individual_assays
+test<-merge(gen_2_wings,individual_assays)
+model<-lmerTest::lmer(formula =   Length..mm. ~ Log_CFU_Eggs + (1|Trial) + (1|Trial:Set.ID),
+                   data = test)
+summary(model)
+
+
+```
+
+**Incorporating sequencing data**
+
+Preparing phyloseq object
+Tree prepping
+```{r}
+pick_new_outgroup <- function(tree.unrooted){
+    require("magrittr")
+    require("data.table")
+    require("ape") # ape::Ntip
+    # tablify parts of tree that we need.
+    treeDT <-
+      cbind(
+        data.table(tree.unrooted$edge),
+        data.table(length = tree.unrooted$edge.length)
+      )[1:Ntip(tree.unrooted)] %>%
+      cbind(data.table(id = tree.unrooted$tip.label))
+    # Take the longest terminal branch as outgroup
+    new.outgroup <- treeDT[which.max(length)]$id
+    return(new.outgroup)
+}
+unrooted_qiime_default<-read.newick(file="c:/Users/aldoa/OneDrive/Desktop/diapause_gno_ovi_sequence_prep/phyloseq/tree.nwk")
+new.outgroup = pick_new_outgroup(unrooted_qiime_default)
+rootedTree = ape::root(unrooted_qiime_default, outgroup=new.outgroup, resolve.root=TRUE)
+phy_tree<-read_tree(rootedTree, errorIfNULL=FALSE)
+```
+Other pieces:
+```{r}
+otu_csv<-read.csv("c:/Users/aldoa/OneDrive/Desktop/diapause_gno_ovi_sequence_prep/phyloseq/otu_table.csv")
+otu_rows_fixed <- data.frame(otu_csv, row.names = 1)
+OTU_16S<-otu_table(otu_rows_fixed,taxa_are_rows = TRUE)
+
+tax_csv<-read.csv("c:/Users/aldoa/OneDrive/Desktop/diapause_gno_ovi_sequence_prep/phyloseq/taxonomy.csv")
+tax_rows_fixed<-data.frame(tax_csv, row.names = 1)
+tax_matrix<-as.matrix(tax_rows_fixed)
+TAX_16S<-tax_table(tax_matrix, errorIfNULL=TRUE)
+
+meta_csv<-read.csv("c:/Users/aldoa/OneDrive/Desktop/diapause_gno_ovi_sequence_prep/phyloseq/master_meta.csv")
+
+meta_ind<-meta_csv %>% filter(exp=="ovi")
+meta_pcr<-meta_csv %>% filter(Control_Type=="pcr")
+
+meta_rows<-merge(meta_ind,meta_pcr,all=TRUE)
+
+meta_rows<-data.frame(meta_rows, row.names = 1)
+
+META_16S<-sample_data(meta_rows)
+
+# seq_object<-phyloseq(OTU_16S,TAX_16S,META_16S,phy_tree)
+# saveRDS(seq_object,"c:/Users/aldoa/OneDrive/Desktop/individual oviposition microbiota analysis/oviposition_initial_dirty")
+```
+
+Decontam procedure (instead of just removing reads that show up in negatives, which is generally not recommended)- https://benjjneb.github.io/decontam/vignettes/decontam_intro.html:
+
+Inspect library size:
+```{r}
+ovi_clean_me<-readRDS("c:/Users/aldoa/OneDrive/Desktop/inidividual oviposition microbiota analysis/oviposition_initial_dirty")
+df <- as.data.frame(sample_data(seq_object)) # Put sample_data into a ggplot-friendly data.frame
+df$LibrarySize <- sample_sums(seq_object)
+df <- df[order(df$LibrarySize),]
+df$Index <- seq(nrow(df))
+ggplot(data=df, aes(x=Index, y=LibrarySize, color=Sample_or_Control)) + geom_point()
+```
+Prevalence-based contaminant assignment 
+```{r}
+sample_data(seq_object)$is.neg <- sample_data(seq_object)$Sample_or_Control == "Control"
+contamdf.prev05 <- isContaminant(seq_object, method="prevalence", neg="is.neg", threshold=0.5)
+table(contamdf.prev05$contaminant)
+
+ovi_prev<-contamdf.prev05[which(contamdf.prev05$contaminant=='TRUE'),]
+
+ps.noncontam <- prune_taxa(!contamdf.prev05$contaminant, seq_object)
+```
+Frequency-based contaminant assignment
+```{r}
+contamdf.freq <- isContaminant(ps.noncontam, method="frequency", conc="Post_Quant")
+head(contamdf.freq)
+table(contamdf.freq$contaminant)
+
+ovi_freq<-contamdf.freq[which(contamdf.freq$contaminant=='TRUE'),]
+
+ovi_contaminant_reads<-c(rownames(ovi_prev),rownames(ovi_freq))
+
+ps.noncontam <- prune_taxa(!contamdf.freq$contaminant, ps.noncontam)
+```
+Removing samples lacking sufficient reads + archaea, mitochondria, chloroplasts
+```{r}
+greater_than_100_ASVs <- prune_samples(sample_sums(seq_object)>=100, ps.noncontam)
+no_controls<-prune_samples(sample_data(greater_than_100_ASVs)$Sample_or_Control == "Sample", greater_than_100_ASVs)
+no_controls<-subset_taxa(no_controls, Class!="Chloroplast")
+no_controls<-subset_taxa(no_controls, Family!="Mitochondria")
+
+ovi_nonzero<-prune_taxa(taxa_sums(no_controls) > 0, no_controls)
+bacteria_only<-subset_taxa(ovi_nonzero, Domain!="Archaea")
+# saveRDS(bacteria_only,"c:/Users/aldoa/OneDrive/Desktop/individual oviposition microbiota analysis/ovi_contam_removed")
+# ovi_nonzero<-readRDS("c:/Users/aldoa/OneDrive/Desktop/individual oviposition microbiota analysis/ovi_contam_removed")
+```
+Fixing tax_table
+```{r}
+# tax <- data.frame(tax_table(ovi_nonzero))
+# 
+# tax.clean <- data.frame(row.names = row.names(tax),
+# Kingdom = str_replace(tax[,1], "D_0__",""),
+# Phylum = str_replace(tax[,2], "D_1__",""),
+# Class = str_replace(tax[,3], "D_2__",""),
+# Order = str_replace(tax[,4], "D_3__",""),
+# Family = str_replace(tax[,5], "D_4__",""),
+# Genus = str_replace(tax[,6], "D_5__",""),
+# Species = str_replace(tax[,7], "D_6__",""),
+# stringsAsFactors = FALSE)
+# tax.clean[is.na(tax.clean)] <- ""
+# 
+# for (i in 1:7){ tax.clean[,i] <- as.character(tax.clean[,i])}
+# ####### Fille holes in the tax table
+# tax.clean[is.na(tax.clean)] <- ""
+# for (i in 1:nrow(tax.clean)){
+#   if (tax.clean[i,2] == ""){
+# kingdom <- paste("Kingdom_", tax.clean[i,1], sep = "")
+# tax.clean[i, 2:7] <- kingdom
+# } else if (tax.clean[i,3] == ""){
+# phylum <- paste("Phylum_", tax.clean[i,2], sep = "")
+# tax.clean[i, 3:7] <- phylum
+# } else if (tax.clean[i,4] == ""){
+# class <- paste("Class_", tax.clean[i,3], sep = "")
+# tax.clean[i, 4:7] <- class
+# } else if (tax.clean[i,5] == ""){
+# order <- paste("Order_", tax.clean[i,4], sep = "")
+# tax.clean[i, 5:7] <- order
+# } else if (tax.clean[i,6] == ""){
+# family <- paste("Family_", tax.clean[i,5], sep = "")
+# tax.clean[i, 6:7] <- family
+# } else if (tax.clean[i,7] == ""){
+# tax.clean$Species[i] <- paste("Genus",tax.clean$Genus[i], sep = "_")
+# }
+# }
+# 
+# tax_table(ovi_nonzero) <- as.matrix(tax.clean)
+# tax_table(ovi_nonzero)
+
+# write.csv(tax_table(ovi_nonzero),"c:/Users/aldoa/OneDrive/Desktop/individual oviposition microbiota analysis//merge_firm_rhizo.csv")
+# tax_table<-read.csv("c:/Users/aldoa/OneDrive/Desktop/individual oviposition microbiota analysis//merge_firm_rhizo.csv")
+
+# tax_rows_fixed<-data.frame(tax_table, row.names = 1)
+# tax_matrix<-as.matrix(tax_rows_fixed)
+# TAX_16S<-tax_table(tax_matrix, errorIfNULL=TRUE)
+
+# for_barplot_tax_fixed<-phyloseq(TAX_16S,sample_data(ovi_nonzero),phy_tree(ovi_nonzero),otu_table(ovi_nonzero))
+
+# saveRDS(for_barplot_tax_fixed,"c:/Users/aldoa/OneDrive/Desktop/individual oviposition microbiota analysis/ovi_final")
+```
+Reading in final phyloseq + generating summary data pre-rarefaction
+```{r}
+phy_final_ovi<-readRDS("c:/Users/aldoa/OneDrive/Desktop/individual oviposition microbiota analysis/ovi_final")
+ #Count of ASV richness
+ ASV_Richness<-colSums(otu_table(phy_final_ovi)!=0)
+ #Total reads per sample
+ Total_Reads<-sample_sums(phy_final_ovi)
+ sum(Total_Reads)
+ median(Total_Reads)
+# phylum_glom<-tax_glom(phy_final_ovi, taxrank="Phylum", NArm=TRUE, bad_empty=c(NA, "", " ", "\t"))
+# unique(tax_table(phylum_glom))
+sum(sample_sums(subset_taxa(phy_final_ovi, Phylum=="Proteobacteria"))) #282 asvs, 957,904 reads
+sum(sample_sums(subset_taxa(phy_final_ovi, Phylum=="Spirochaetota"))) #1 asv, 93 reads
+sum(sample_sums(subset_taxa(phy_final_ovi, Phylum=="Campylobacterota"))) #1 asv, 18 reads
+sum(sample_sums(subset_taxa(phy_final_ovi, Phylum=="Bdellovibrionota"))) #5 asvs, 13,556 reads
+sum(sample_sums(subset_taxa(phy_final_ovi, Phylum=="Cyanobacteria"))) #4 asvs, 2,393 reads
+sum(sample_sums(subset_taxa(phy_final_ovi, Phylum=="Kingdom_Bacteria"))) #7 asvs, 2,574 reads
+sum(sample_sums(subset_taxa(phy_final_ovi, Phylum=="Firmicutes"))) #80 #7243
+sum(sample_sums(subset_taxa(phy_final_ovi, Phylum=="Chloroflexota"))) #6 #916
+sum(sample_sums(subset_taxa(phy_final_ovi, Phylum=="Actinobacteriota"))) #59 #25435
+sum(sample_sums(subset_taxa(phy_final_ovi, Phylum=="Verrucomicrobiota"))) #3 160
+sum(sample_sums(subset_taxa(phy_final_ovi, Phylum=="Bacteroidota"))) #78 #144,434
+sum(sample_sums(subset_taxa(phy_final_ovi, Phylum=="Planctomycetota"))) #6 #347
+sum(sample_sums(subset_taxa(phy_final_ovi, Phylum=="Thermotogota"))) #2 #242
+sum(sample_sums(subset_taxa(phy_final_ovi, Phylum=="Acidobacteriota"))) #9 #118
+sum(sample_sums(subset_taxa(phy_final_ovi, Phylum=="Myxococcota"))) #2 #74
+
+(957904 + 144434+ 25435 + 13556 + 7243)/1155507
+
+957904/1155507 # proteobacteria 83%
+144434/1155507 # bacteroidota 12%
+25435/1155507 # actinobacteria 2%
+13556/1155507 # bdellovibrionata 1%
+7243/1155507 # firmicutes 1%
+```
+
+Rarefaction check
+```{r}
+p<-ranacapa::ggrare(phy_final_ovi, step = 1000, color = "ovi_sample_type", se = FALSE, plot = FALSE, label="Sample")
+p + facet_wrap(~ovi_trial) +  geom_line(size=1) + coord_cartesian(xlim =c(0, 1000), ylim = c(0, 150)) + theme_cowplot() + theme(panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank())
+
+# unsaturated: OVI58, OVI52, OVI54, OVI77, OVI73, OVI57, OVI79, OVI12, OVI94, OVI84, OVI91, OVI161, OVI164, OVI165, OVI190, OVI160, OVI167, OVI166, OVI185, OVI187, OVI181
+
+unsat_list<-c("OVI58", "OVI52", "OVI54", "OVI77", "OVI73", "OVI57", "OVI79", "OVI12", "OVI94", "OVI84", "OVI91", "OVI161", "OVI164", "OVI165", "OVI190", "OVI160", "OVI167", "OVI166", "OVI185", "OVI187", "OVI181")
+
+length(unsat_list)
+
+# remove them!
+# install.packages("Hmisc")
+library(Hmisc)
+data<-as.data.frame(sample_data(phy_final_ovi))
+
+data_sub<-data[which(rownames(data) %nin% unsat_list),]
+# nrow(data_sub)
+META_16S<-sample_data(data_sub)
+
+unsat_removed_physeq<-phyloseq(META_16S,tax_table(phy_final_ovi),phy_tree(phy_final_ovi),otu_table(phy_final_ovi))
+unsat_removed_physeq<-prune_taxa(taxa_sums(unsat_removed_physeq) > 0, unsat_removed_physeq)
+
+# saveRDS(unsat_removed_physeq,"c:/Users/aldoa/OneDrive/Desktop/individual oviposition microbiota analysis/ovi_final_unsat_removed")
+unsat_removed_physeq<-readRDS("c:/Users/aldoa/OneDrive/Desktop/individual oviposition microbiota analysis/ovi_final_unsat_removed")
+
+p<-ranacapa::ggrare(unsat_removed_physeq, step = 1000, color = "ovi_sample_type", se = FALSE, plot = FALSE)
+p + facet_wrap(~ovi_trial) +  geom_line(size=1) + coord_cartesian(xlim =c(0, 2000), ylim = c(0, 120)) + theme_cowplot() + theme(panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank())
+
+```
+
+Preliminary visualization by sample type
+
+Temporary microshades plotting function (change as needed)
+```{r}
+require(forcats)
+temporary_microshades <- function (mdf_group,
+                                cdf,
+                                group_label = "Phylum Genus",
+                                x = "ovi_cage_text",
+                                y = "Abundance")
+{
+  if (class(mdf_group) != "data.frame")
+  {
+    stop("mdf_group argument must be a data frame")
+  }
+
+  if( (sum(is.na(cdf$hex)) > 0) || (sum(is.na(cdf$group)) > 0) )
+  {
+    stop("cdf does not contain complete color information - missing hex or group info")
+  }
+
+
+  plot <- mdf_group %>%
+    ggplot(aes(x = reorder(.data[[x]],ovi_cage), y = .data[[y]]), fill = group_label) +
+    scale_fill_manual(name = group_label,
+                      values = cdf$hex,
+                      breaks = cdf$group) +
+    scale_colour_manual(name = group_label,
+                        values = cdf$hex,
+                        breaks = cdf$group) +
+    geom_bar(aes(color=group, fill=group), stat="identity", position="stack",width=.8) +
+    theme(axis.text.x = element_text(angle = 45))
+
+  plot
+}
+```
+read in metadata - here one can also re-define metadata to merge pupation and late larval water
+```{r}
+# sample_data(unsat_removed_physeq)
+# write.csv(sample_data(unsat_removed_physeq),"c:/Users/aldoa/OneDrive/Desktop/individual_metadata.csv")
+metadata<-read.csv("c:/Users/aldoa/OneDrive/Desktop/individual_metadata.csv")
+merge_me<-read.csv("c:/Users/aldoa/OneDrive/Desktop/for individual merge.csv")
+
+temp<-merge(metadata,merge_me)
+# what correlations actually are of interest? does a certain amount of egg water taxa correspond with hatch rate
+# egg water - dev outcomes
+# mom or dad rel abund corresponding to hatch and dev outcomes?
+# but since there's a certain amount of possible carry-over... one could subset to adult associated or use some measure of transmission efficiency?
+temp<-temp %>% remove_rownames %>% column_to_rownames(var="X")
+
+# temp<-temp %>%
+     # mutate(ovi_sample_type = dplyr::recode(ovi_sample_type, 
+     #     `Pupation Water` = "Late Larval Water",
+     #     `Arrested Water` = "Late Larval Water"))
+
+
+# meta_rows<-data.frame(temp, row.names = 1)
+META_16S<-sample_data(temp)
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+# sample_data(meta_variable_physeq)
+```
+Graphing microshades temp rel abund plot
+```{r}
+library(microshades)
+# install.packages("ggh4x")
+library("ggh4x")
+
+#for purposes of initial viz maybe we do not need to the really small groups probably
+
+temp<-prune_samples(sample_data(unsat_removed_physeq)$ovi_sample_type !="Tray Water Sample", unsat_removed_physeq)
+sample_data(temp)$ovi_sample_type_new<-sample_data(temp)$ovi_sample_type
+
+temp_phyloseq_df<-as.data.frame(as.matrix(sample_data(temp)))
+
+temp_phyloseq_df<-temp_phyloseq_df %>%
+     mutate(ovi_sample_type_new = recode(ovi_sample_type_new, `Arrested Water` = "Late Larval Water",
+         `Pupation Water` = "Late Larval Water"))
+meta_16s<-sample_data(temp_phyloseq_df)
+
+temp<-phyloseq(otu_table(temp), meta_16s,tax_table(temp))
+
+sample_data(temp)$ovi_sample_type_new<-factor(sample_data(temp)$ovi_sample_type_new, levels=c("Generation 1 Male Pool", "Individual Generation 1 Female","Egg Water", "Late Larval Water"))
+
+# sample_data(temp)$identity<-paste("T",sample_data(temp)$ovi_trial," ","C",sample_data(temp)$ovi_cage, sep="")
+
+sample_data(temp)$ovi_cage_text<-paste("C",sample_data(temp)$ovi_cage,sep="")
+
+# sample_data(temp)$identity<-factor(sample_data(temp)$identity,levels=c("T1 C2","T1 C3","T1 C4","T1 C5","T1 C6", "T1 C7","T1 C8","T1 C9" ,"T1 C10","T1 C11","T1 C12","T2 C1","T2 C2","T2 C3","T2 C4","T2 C6","T2 C7","T2 C8","T2 C9","T2 C12","T3 C1","T3 C2","T3 C3","T3 C4","T3 C5","T3 C6","T3 C8","T3 C9","T3 C10","T3 C11","T3 C12","T4 C2","T4 C4","T4 C5","T4 C7","T4 C10","T4 C11", "T4 C12","T4 C13","T4 C14","T4 C15","T4 C16","T4 C17","T4 C21","T4 C22","T4 C24"))
+
+# sample_data(temp)$ovi_trial<-as.numeric(sample_data(temp)$ovi_trial)
+sample_data(temp)$ovi_cage<-as.numeric(sample_data(temp)$ovi_cage)
+
+mdf_prep <- prep_mdf(temp, remove_na = TRUE)
+color_obj <- microshades::create_color_dfs(mdf_prep, group_level= "Phylum", subgroup_level= "Genus", selected_groups = c("Proteobacteria", "Actinobacteriota", "Bacteroidota", "Firmicutes"))
+
+mdf <- color_obj$mdf
+cdf <- color_obj$cdf
+
+plot <- temporary_microshades(mdf, cdf)
+legend <-custom_legend(mdf, cdf, subgroup_level = "Genus")
+
+facet_labels <- as_labeller(c("Generation 1 Male Pool" = "Mated Males" ,"Individual Generation 1 Female" = "Mothers", "Egg Water" = "Egg Water","Late Larval Water"= "Late Larval Water","1"="1","2"="2", "3"="3","4"="4"))
+
+plot_diff <- plot + scale_y_continuous(labels = scales::percent, expand = expansion(0)) +
+  theme(legend.position = "none")  +
+  # theme(axis.text.x = element_text(size= 20)) +
+  facet_nested(~ovi_sample_type_new+ovi_trial, scales = "free_x", space="free_x",labeller=facet_labels, nest_line = element_line(colour = "black")) +
+  theme(axis.text.x = element_text(size= 8)) + 
+  theme(axis.text.x = element_text(margin = margin(t = 10))) +
+  # theme(axis.text.x = element_text(hjust = 0)) +
+  theme(plot.margin = margin(6,20,6,6)) + xlab("Sample Group") +
+  theme(ggh4x.facet.nestline = element_line(linetype = 3))
+
+plot_new<-plot_grid(plot_diff, legend,  rel_widths = c(1, .25))
+
+# ggsave("new_figure.pdf",plot=plot_new, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=4,width=15)
+
+# ggsave("temp.pdf",plot=pupation_rate_relabund, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=4,width=15)
+
+```
+
+Alluvial plot and tracking proportions of major phyla are lost downstream
+```{r}
+# install.packages("ggalluvial")
+library(ggalluvial)
+
+x<-as.data.frame(adults)
+
+x$start<-"adults"
+x$destination<-"lost"
+x$destination[x$adults %in% category1] <- "eggs"
+x$destination[x$adults %in% category2] <- "late water"
+x$destination[x$adults %in% category3] <- "both"
+
+x$shared<-"shared"
+x$shared[which(x$destination == "lost")] <- "lost"
+
+
+colnames(x)<-c("OTU","start","destination","shared")
+x<-x[,-2]
+x<-merge(x,tax)
+
+x<-read.csv("./test.csv")
+
+length(x$location[x$Phylum=="Proteobacteria"])
+length(x$location[x$location=="lost" & x$Phylum=="Proteobacteria"])
+45/97
+length(x$location[x$Phylum=="Actinobacteriota"])
+length(x$location[x$location=="lost" & x$Phylum=="Actinobacteriota"])
+8/19
+length(x$location[x$Phylum=="Firmicutes"])
+length(x$location[x$location=="lost" & x$Phylum=="Firmicutes"])
+14/21
+length(x$location[x$Phylum=="Bacteroidota"])
+length(x$location[x$location=="lost" & x$Phylum=="Bacteroidota"])
+11/22
+
+colors = c("Staphylococcus" = "#6a51a3", "Bacillus" = "#807dba", "Family_Clostridiaceae" = "#9e9ac8", "Pediococcus" = "#bcbddc", "Other Firmicutes" = "#dadaeb",
+           "Chryseobacterium" = "#4292c6", "Pedobacter" = "#6baed6", "Elizabethkingia" = "#9ecae1", "Siphonobacter" = "#c6dbef", "Other Bacteroidota" = "#eff3ff",
+           "Leucobacter" = "#ff7f00", "Nocardioides" = "#fe9929", "Micrococcus" = "#fdae6b", "Mycobacterium" = "#fec44f", "Other Actinobacteriota" = "#feeda0",
+           "Pseudomonas" = "#238b4f", "Stenotrophomonas" = "#41ab5d", "Family_Burkholderiaceae" = "#74c476", "Comamonas" = "#a1d99b", "Other Proteobacteria" = "#c7e9c0"
+           )
+
+
+y<-ggplot(as.data.frame(x),
+       aes(axis1 = Phylum, axis2 = location)) +
+  geom_alluvium(width = 1/12,alpha=0.7,aes(fill= Genus_use)) +
+  geom_stratum() +
+  geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("start", "location"), expand = c(.05, .05)) +
+  scale_fill_manual(values = colors) +  # Replace with your actual Phylum names +
+  ggtitle("ASV transmission from adults") + theme_minimal() + theme(legend.position="none")
+```
+
+Regressions to explore taxa x developmental milestone relationships (likelihood hatch, pupation, survival)
+
+Hatch
+
+Start with egg water ASVs associated with hatch rate x3 ASVs are positively associated with egg hatch rate
+```{r}
+# sample_data(meta_variable_physeq)$Hatch_Rate
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type=="Egg Water",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+# library(lme4)
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+ps.melt<-ps.melt %>% filter(Hatch_Rate != "NA")
+#subset the data
+#  $coefficients [2] and [8]
+# str(temp)
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
+  binomial_model_temp<-glm(formula = Hatch_Rate ~ Abundance,
+                   data = focal_asv_df,
+                   weights= Tot_Eggs,
+                   family = binomial)
+  temp_summary<-summary(binomial_model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[8]
+  count<-count+1
+}
+merge_df<-ps.melt[,c(1,35:40)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+merged_hatch <- unique(temp_merge, by = "OTU")
+merged_hatch$FDR <- p.adjust(merged_hatch$`Uncorrected p-value`, method = "BH" )
+
+significant_corr_hatch_rate_egg<-merged_hatch %>% filter(FDR<0.05)
+
+significant_corr_hatch_rate_egg$egg_hatch<-significant_corr_hatch_rate_egg$`Model Coefficient`
+
+significant_corr_hatch_rate_positive_egg<- significant_corr_hatch_rate_egg %>% filter(`Model Coefficient`>0)
+significant_corr_hatch_rate_negative_egg<- significant_corr_hatch_rate_egg %>% filter(`Model Coefficient`<0)
+```
+Mom-associated relationship with hatch rate - x106 ASVs!
+```{r}
+##### now by carriage in adults! females
+
+# sample_data(meta_variable_physeq)$Hatch_Rate
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Individual Generation 1 Female",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+
+# unique(sample_data(meta_variable_physeq)$ovi_sample_type)
+
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+ps.melt<-ps.melt %>% filter(Hatch_Rate != "NA")
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
+  binomial_model_temp<-glm(formula = Hatch_Rate ~ Abundance,
+                   data = focal_asv_df,
+                   weights= Tot_Eggs,
+                   family = binomial)
+  temp_summary<-summary(binomial_model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[8]
+  count<-count+1
+}
+merge_df<-ps.melt[,c(1,35:40)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+merged_hatch <- unique(temp_merge, by = "OTU")
+merged_hatch$FDR <- p.adjust(merged_hatch$`Uncorrected p-value`, method = "BH" )
+
+significant_corr_hatch_rate_mom<-merged_hatch %>% filter(FDR<0.05)
+
+significant_corr_hatch_rate_mom$mom_hatch<-significant_corr_hatch_rate_mom$`Model Coefficient`
+
+significant_corr_hatch_rate_positive_mom<- significant_corr_hatch_rate_mom %>% filter(`Model Coefficient`>0)
+significant_corr_hatch_rate_negative_mom<- significant_corr_hatch_rate_mom %>% filter(`Model Coefficient`<0)
+```
+Dad-associated relationship with hatch rate - x24 ASVs!
+```{r}
+##### now by carriage in adults! males
+
+# sample_data(meta_variable_physeq)$Hatch_Rate
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Generation 1 Male Pool",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+
+# unique(sample_data(meta_variable_physeq)$ovi_sample_type)
+
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+ps.melt<-ps.melt %>% filter(Hatch_Rate != "NA")
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
+  binomial_model_temp<-glm(formula = Hatch_Rate ~ Abundance,
+                   data = focal_asv_df,
+                   weights= Tot_Eggs,
+                   family = binomial)
+  temp_summary<-summary(binomial_model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[8]
+  count<-count+1
+}
+merge_df<-ps.melt[,c(1,35:40)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+merged_hatch <- unique(temp_merge, by = "OTU")
+merged_hatch$FDR <- p.adjust(merged_hatch$`Uncorrected p-value`, method = "BH" )
+
+significant_corr_hatch_rate_dads<-merged_hatch %>% filter(FDR<0.05)
+
+significant_corr_hatch_rate_dads$dad_hatch<-significant_corr_hatch_rate_dads$`Model Coefficient`
+
+significant_corr_hatch_rate_positive_dads<- significant_corr_hatch_rate_dads %>% filter(`Model Coefficient`>0)
+significant_corr_hatch_rate_negative_dads<- significant_corr_hatch_rate_dads %>% filter(`Model Coefficient`<0)
+```
+
+Generating dataframe of shared taxa (globally shared taxa : `list_ever_shared_downstream`)
+```{r}
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+females<- prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Individual Generation 1 Female",meta_variable_physeq)
+  females<-prune_taxa(taxa_sums(females) > 0, females)
+  female_adults_asvs<-rownames(otu_table(females))
+males<- prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Generation 1 Male Pool",meta_variable_physeq)
+  males<-prune_taxa(taxa_sums(males) > 0, males)
+  male_adults_asvs<-rownames(otu_table(males))
+
+# adult asvs  
+adults<-c(female_adults_asvs,male_adults_asvs)
+adults<-unique(adults)
+
+# egg asvs
+eggs <- prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Egg Water", meta_variable_physeq)
+  eggs<-prune_taxa(taxa_sums(eggs) > 0, eggs)
+  eggs_asvs<-rownames(otu_table(eggs))  
+  
+# late water
+late_water<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Pupation Water" | sample_data(meta_variable_physeq)$ovi_sample_type == "Arrested Water", meta_variable_physeq)
+  late_water<-prune_taxa(taxa_sums(late_water) > 0, late_water)
+  late_water_asvs<-rownames(otu_table(late_water))
+
+# which egg taxa were seen in parental pool
+library(gplots)
+venn_base<-venn(list(adults,eggs_asvs))
+
+intersections_eggs<-attr(venn_base,"intersections")
+all_intersect_df_eggs<-as.data.frame(intersections_eggs$`A:B`)  
+
+# which late water taxa were seen in parental pool
+venn_base<-venn(list(adults,late_water_asvs))
+
+intersections_pup<-attr(venn_base,"intersections")
+all_intersect_df_pup<-as.data.frame(intersections_pup$`A:B`)  
+
+# list and phyloseq object with shared taxa only
+list_ever_shared_downstream<-unique(c(intersections_pup$`A:B`,intersections_eggs$`A:B`))
+  shared_taxa_ever<-prune_taxa(list_ever_shared_downstream,meta_variable_physeq)
+  shared_taxa_ever<-prune_taxa(taxa_sums(shared_taxa_ever) > 0, shared_taxa_ever)
+```
+
+Sub-setting significant correlations of hatch to shared taxa (ever downstream)
+```{r}
+# dad
+dads_sig_hatch_ever_shared<-significant_corr_hatch_rate_dads %>% filter(OTU %in% list_ever_shared_downstream)
+#mom
+moms_sig_hatch_ever_shared<-significant_corr_hatch_rate_mom %>% filter(OTU %in% list_ever_shared_downstream)
+# are egg taxa shared
+eggs_sig_hatch_ever_shared<-significant_corr_hatch_rate_egg %>% filter(OTU %in% list_ever_shared_downstream)
+```
+
+Pupation
+
+Association of taxa with likelihood of reaching pupal stage: maternal --->  x17 ever shared
+```{r}
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Individual Generation 1 Female",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+ps.melt<-ps.melt %>% filter(pupation_rate!= "NA")
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
+  binomial_model_temp<-glm(formula = pupation_rate ~ Abundance,
+                   data = focal_asv_df,
+                   weights= Tot_Larvae,
+                   family = binomial)
+  temp_summary<-summary(binomial_model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[8]
+  count<-count+1
+}
+merge_df<-ps.melt[,c(1,35:40)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+merged_pupation <- unique(temp_merge, by = "OTU")
+merged_pupation$FDR <- p.adjust(merged_pupation$`Uncorrected p-value`, method = "BH" )
+
+significant_corr_pupation_mom<-merged_pupation %>% filter(FDR<0.05)
+significant_corr_pupation_mom$mom_pup<-significant_corr_pupation_mom$`Model Coefficient`
+
+significant_corr_pupation_mom_ever_shared<-significant_corr_pupation_mom %>% filter(OTU %in% list_ever_shared_downstream)
+significant_corr_pupation_mom_ever_shared$mom_pup<-significant_corr_pupation_mom_ever_shared$`Model Coefficient`
+shared_from_mom_pos_pupation<-significant_corr_pupation_mom_ever_shared%>% filter(`Model Coefficient`>0)
+shared_from_mom_pos_pupation<-as.list(shared_from_mom_pos_pupation$OTU)
+```
+Association of taxa with likelihood of reaching pupal stage: paternal --->  x9 ever shared
+```{r}
+########################################## dad
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Generation 1 Male Pool",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+ps.melt<-ps.melt %>% filter(pupation_rate!= "NA")
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
+  binomial_model_temp<-glm(formula = pupation_rate ~ Abundance,
+                   data = focal_asv_df,
+                   weights= Tot_Larvae,
+                   family = binomial)
+  temp_summary<-summary(binomial_model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[8]
+  count<-count+1
+}
+merge_df<-ps.melt[,c(1,35:40)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+merged_pupation <- unique(temp_merge, by = "OTU")
+merged_pupation$FDR <- p.adjust(merged_pupation$`Uncorrected p-value`, method = "BH" )
+
+significant_corr_pupation_dad<-merged_pupation %>% filter(FDR<0.05)
+significant_corr_pupation_dad$dad_pup<-significant_corr_pupation_dad$`Model Coefficient`
+
+
+significant_corr_pupation_dad_ever_shared<-significant_corr_pupation_dad %>% filter(OTU %in% list_ever_shared_downstream)
+
+significant_corr_pupation_dad_ever_shared$dad_pup<-significant_corr_pupation_dad_ever_shared$`Model Coefficient`
+
+shared_pup_positive_from_dad<-significant_corr_pupation_dad_ever_shared%>% filter(`Model Coefficient`>0)
+shared_pup_positive_from_dad<-as.list(shared_pup_positive_from_dad$OTU)
+```
+Association of taxa with likelihood of reaching pupal stage: egg water ---> x32 ever shared
+```{r}
+########################################## egg
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Egg Water",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+ps.melt<-ps.melt %>% filter(pupation_rate!= "NA")
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
+  binomial_model_temp<-glm(formula = pupation_rate ~ Abundance,
+                   data = focal_asv_df,
+                   weights= Tot_Larvae,
+                   family = binomial)
+  temp_summary<-summary(binomial_model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[8]
+  count<-count+1
+}
+merge_df<-ps.melt[,c(1,35:40)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+merged_pupation <- unique(temp_merge, by = "OTU")
+merged_pupation$FDR <- p.adjust(merged_pupation$`Uncorrected p-value`, method = "BH" )
+
+significant_corr_pupation_egg<-merged_pupation %>% filter(FDR<0.05)
+
+significant_corr_pupation_egg_ever_shared<-significant_corr_pupation_egg %>% filter(OTU %in% list_ever_shared_downstream)
+
+significant_corr_pupation_egg_ever_shared$egg_pup<-significant_corr_pupation_egg_ever_shared$`Model Coefficient`
+
+shared_pup_positive_from_eggs<-significant_corr_pupation_egg_ever_shared%>% filter(`Model Coefficient`>0)
+shared_pup_positive_from_eggs<-as.list(shared_pup_positive_from_eggs$OTU)
+```
+Association of taxa with likelihood of reaching pupal stage: late water ---> x18 ever shared
+```{r}
+########################################## pupation
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Pupation Water",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+ps.melt<-ps.melt %>% filter(pupation_rate!= "NA")
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
+  binomial_model_temp<-glm(formula = pupation_rate ~ Abundance,
+                   data = focal_asv_df,
+                   weights= Tot_Larvae,
+                   family = binomial)
+  temp_summary<-summary(binomial_model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[8]
+  count<-count+1
+}
+merge_df<-ps.melt[,c(1,35:40)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+merged_pupation <- unique(temp_merge, by = "OTU")
+merged_pupation$FDR <- p.adjust(merged_pupation$`Uncorrected p-value`, method = "BH" )
+
+significant_corr_pupation_pup<-merged_pupation %>% filter(FDR<0.05)
+
+significant_corr_pupation_pup_ever_shared<-significant_corr_pupation_pup %>% filter(OTU %in% list_ever_shared_downstream)
+
+significant_corr_pupation_pup_ever_shared$pup_pup<-significant_corr_pupation_pup_ever_shared$`Model Coefficient`
+
+shared_pup_positive_from_pup<-significant_corr_pupation_pup_ever_shared%>% filter(`Model Coefficient`>0)
+```
+
+Survival
+
+Association of taxa with likelihood of survival: maternal ---> none!
+```{r}
+########################################## mom
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+sample_data(meta_variable_physeq)$survival_rate<-1-sample_data(meta_variable_physeq)$death_rate
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Individual Generation 1 Female",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+ps.melt<-ps.melt %>% filter(pupation_rate!= "NA")
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
+  binomial_model_temp<-glm(formula = survival_rate ~ Abundance,
+                   data = focal_asv_df,
+                   weights= Tot_Larvae,
+                   family = binomial)
+  temp_summary<-summary(binomial_model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[8]
+  count<-count+1
+}
+merge_df<-ps.melt[,c(1,35:40)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+merged_survival <- unique(temp_merge, by = "OTU")
+merged_survival$FDR <- p.adjust(merged_survival$`Uncorrected p-value`, method = "BH" )
+
+significant_corr_survival_maternal<-merged_survival %>% filter(FDR<0.05)
+significant_corr_survival_maternal_ever_shared<-significant_corr_survival_maternal %>% filter(OTU %in% list_ever_shared_downstream)
+significant_corr_survival_maternal_ever_shared%>% filter(`Model Coefficient`>0)
+```
+Association of taxa with likelihood of survival: paternal ---> none!
+```{r}
+########################################## dad
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+sample_data(meta_variable_physeq)$survival_rate<-1-sample_data(meta_variable_physeq)$death_rate
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Generation 1 Male Pool",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+ps.melt<-ps.melt %>% filter(pupation_rate!= "NA")
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
+  binomial_model_temp<-glm(formula = survival_rate ~ Abundance,
+                   data = focal_asv_df,
+                   weights= Tot_Larvae,
+                   family = binomial)
+  temp_summary<-summary(binomial_model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[8]
+  count<-count+1
+}
+merge_df<-ps.melt[,c(1,35:40)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+merged_survival <- unique(temp_merge, by = "OTU")
+merged_survival$FDR <- p.adjust(merged_survival$`Uncorrected p-value`, method = "BH" )
+
+significant_corr_survival_paternal<-merged_survival %>% filter(FDR<0.05)
+
+significant_corr_survival_paternal_ever_shared<-significant_corr_survival_paternal %>% filter(OTU %in% list_ever_shared_downstream)
+significant_corr_survival_paternal_ever_shared%>% filter(`Model Coefficient`>0)
+```
+Association of taxa with likelihood of survival: egg water ---> x9 ever shared
+```{r}
+########################################## egg
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+sample_data(meta_variable_physeq)$survival_rate<-1-sample_data(meta_variable_physeq)$death_rate
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Egg Water",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+ps.melt<-ps.melt %>% filter(pupation_rate!= "NA")
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
+  binomial_model_temp<-glm(formula = survival_rate ~ Abundance,
+                   data = focal_asv_df,
+                   weights= Tot_Larvae,
+                   family = binomial)
+  temp_summary<-summary(binomial_model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[8]
+  count<-count+1
+}
+merge_df<-ps.melt[,c(1,35:40)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+merged_survival <- unique(temp_merge, by = "OTU")
+merged_survival$FDR <- p.adjust(merged_survival$`Uncorrected p-value`, method = "BH" )
+
+significant_corr_survival_egg<-merged_survival %>% filter(FDR<0.05)
+
+significant_corr_survival_egg_ever_shared<-significant_corr_survival_egg %>% filter(OTU %in% list_ever_shared_downstream)
+
+significant_corr_survival_egg_ever_shared$egg_survival<-significant_corr_survival_egg_ever_shared$`Model Coefficient`
+
+shared_survivial_positive_from_eggs<-significant_corr_survival_egg_ever_shared%>% filter(`Model Coefficient`>0)
+shared_survivial_positive_from_eggs<- as.list(shared_survivial_positive_from_eggs$OTU)
+```
+Association of taxa with likelihood of survival: pupation water ---> x2 ever shared
+```{r}
+########################################## pupation
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+sample_data(meta_variable_physeq)$survival_rate<-1-sample_data(meta_variable_physeq)$death_rate
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Pupation Water",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+# library(lme4)
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+ps.melt<-ps.melt %>% filter(pupation_rate!= "NA")
+#subset the data
+#  $coefficients [2] and [8]
+# str(temp)
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
+  binomial_model_temp<-glm(formula = survival_rate ~ Abundance,
+                   data = focal_asv_df,
+                   weights= Tot_Larvae,
+                   family = binomial)
+  temp_summary<-summary(binomial_model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[8]
+  count<-count+1
+}
+merge_df<-ps.melt[,c(1,35:40)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+merged_survival <- unique(temp_merge, by = "OTU")
+merged_survival$FDR <- p.adjust(merged_survival$`Uncorrected p-value`, method = "BH" )
+
+significant_corr_survival_pup<-merged_survival %>% filter(FDR<0.05)
+
+significant_corr_survival_pup_ever_shared<-significant_corr_survival_pup %>% filter(OTU %in% list_ever_shared_downstream)
+
+significant_corr_survival_pup_ever_shared$pup_survival<-significant_corr_survival_pup_ever_shared$`Model Coefficient`
+
+shared_survivial_positive_from_pup<-significant_corr_survival_pup_ever_shared%>% filter(`Model Coefficient`>0)
+shared_survivial_positive_from_pup<-as.list(shared_survivial_positive_from_pup$OTU)
+
+# write.csv(transferred_survivial_positive_from_pup, "c:/Users/aldoa/OneDrive/Desktop/fourths_shared_and_transferred.csv")
+```
+
+How to summarize these data?
+Start by merging dfs
+```{r}
+a<-significant_corr_hatch_rate_mom
+a[is.na(a)] <- 0
+b<-eggs_sig_hatch_ever_shared
+b[is.na(b)] <- 0
+c<-significant_corr_hatch_rate_dads
+c[is.na(c)] <- 0
+ e<-significant_corr_pupation_mom_ever_shared
+e[is.na(e)] <- 0
+f<-significant_corr_pupation_dad_ever_shared
+f[is.na(f)] <- 0
+g<-significant_corr_pupation_egg_ever_shared
+g[is.na(g)] <- 0
+h<-significant_corr_pupation_pup_ever_shared
+h[is.na(h)] <- 0
+i<-significant_corr_survival_egg_ever_shared
+i[is.na(i)] <- 0
+j<-significant_corr_survival_pup_ever_shared
+j[is.na(j)] <- 0
+
+temp<-merge(a,b,by=c("OTU","Phylum","Class","Order","Family","Genus"),all=TRUE)
+temp<-merge(temp,c,by=c("OTU","Phylum","Class","Order","Family","Genus"),all=TRUE)
+temp<-merge(temp,e,by=c("OTU","Phylum","Class","Order","Family","Genus"),all=TRUE)
+temp<-merge(temp,f,by=c("OTU","Phylum","Class","Order","Family","Genus"),all=TRUE)
+temp<-merge(temp,g,by=c("OTU","Phylum","Class","Order","Family","Genus"),all=TRUE)
+temp<-merge(temp,h,by=c("OTU","Phylum","Class","Order","Family","Genus"),all=TRUE)
+temp<-merge(temp,i,by=c("OTU","Phylum","Class","Order","Family","Genus"),all=TRUE)
+temp<-merge(temp,j,by=c("OTU","Phylum","Class","Order","Family","Genus"),all=TRUE)
+
+merged_df<-temp[,c(1:6,11,16,21,26,31,36,41,46,51)]
+
+## generate supplementary table 2 from merged df
+# write.csv(merged_df,"Supplementary Table 2.csv")
+
+# generate top taxa in excel by subsetting merged_df
+# read-in as df
+df<-read.csv("./temp top 100 absolute value.csv")
+
+#how many correlated taxa from mom are good for hatching
+length(merged_df$mom_hatch[is.na(merged_df$mom_hatch) == FALSE & merged_df$OTU %in% df$OTU])
+length(merged_df$mom_hatch[is.na(merged_df$mom_hatch) == FALSE & merged_df$OTU %in% df$OTU & merged_df$mom_hatch > 0])
+96/133
+# negative in mom but positive elsewhere
+a<-(merged_df[is.na(merged_df$mom_hatch) == FALSE & merged_df$OTU %in% df$OTU & merged_df$mom_hatch < 0 & is.na(merged_df$dad_hatch) == FALSE & merged_df$dad_hatch >0,])
+b<-(merged_df[is.na(merged_df$mom_hatch) == FALSE & merged_df$OTU %in% df$OTU & merged_df$mom_hatch < 0 & is.na(merged_df$egg_hatch) == FALSE & merged_df$egg_hatch >0,])
+
+c<-(merged_df[is.na(merged_df$mom_hatch) == FALSE & merged_df$OTU %in% df$OTU & merged_df$mom_hatch < 0 & is.na(merged_df$mom_pup) == FALSE & merged_df$mom_pup >0,])
+d<-(merged_df[is.na(merged_df$mom_hatch) == FALSE & merged_df$OTU %in% df$OTU & merged_df$mom_hatch < 0 & is.na(merged_df$dad_pup) == FALSE & merged_df$dad_pup >0,])
+e<-(merged_df[is.na(merged_df$mom_hatch) == FALSE & merged_df$OTU %in% df$OTU & merged_df$mom_hatch < 0 & is.na(merged_df$egg_pup) == FALSE & merged_df$egg_pup >0,])
+f<-(merged_df[is.na(merged_df$mom_hatch) == FALSE & merged_df$OTU %in% df$OTU & merged_df$mom_hatch < 0 & is.na(merged_df$pup_pup) == FALSE & merged_df$pup_pup >0,])
+
+g<-(merged_df[is.na(merged_df$mom_hatch) == FALSE & merged_df$OTU %in% df$OTU & merged_df$mom_hatch < 0 & is.na(merged_df$egg_survival) == FALSE & merged_df$egg_survival >0,])
+h<-(merged_df[is.na(merged_df$mom_hatch) == FALSE & merged_df$OTU %in% df$OTU & merged_df$mom_hatch < 0 & is.na(merged_df$pup_survival) == FALSE & merged_df$pup_survival >0,])
+
+length(merged_df$mom_hatch[is.na(merged_df$mom_hatch) == FALSE & merged_df$OTU %in% df$OTU & merged_df$mom_hatch < 0])
+
+length(unique(c(a$OTU,b$OTU,c$OTU,d$OTU,e$OTU,f$OTU,g$OTU,h$OTU)))
+20/37
+```
+Generate rough figure to summarize coef information
+```{r}
+# major phyla represented in dataset
+good_phyla<-c("Actinobacteriota","Bacteroidota","Proteobacteria","Firmicutes")  
+pruned_phyloseq<-prune_taxa(df$OTU,unsat_removed_physeq)
+
+pruned_phyloseq<-subset_taxa(pruned_phyloseq,Phylum %in% good_phyla)
+
+# this is a documented error in the greengenes2 database that calls chloroplasts a genus of marine bacteria
+pruned_phyloseq<-subset_taxa(pruned_phyloseq,Genus != "JC017")
+
+  pruned_phyloseq<-prune_taxa(taxa_sums(pruned_phyloseq) > 0, pruned_phyloseq)
+  
+  df <- data.frame(df, row.names = 1)
+ tax<-as.data.frame(as.matrix(tax_table(pruned_phyloseq)))
+ tax<-tibble::rownames_to_column(tax, "OTU")
+ 
+tax<-tax %>% filter(Phylum %in% good_phyla) 
+
+df<-rownames_to_column(df,"OTU")
+merge<-merge(tax,df)
+rownames(merge) <- make.names(merge$Genus, unique = TRUE)
+
+merge<-rownames_to_column(merge,"Sample")
+merge_col_tax_annotation<-merge[,-c(2,3,5:18)]
+# merge_col_tax_annotation<-merge_col_tax_annotation[,-3]
+merge_col_tax_annotation <- data.frame(merge_col_tax_annotation, row.names = 1)
+
+class(merge_col_tax_annotation)
+
+subset_merge<-merge[,-c(2:9)]
+subset_merge<-column_to_rownames(subset_merge,var="Sample")
+
+matrix<-as.matrix(subset_merge)
+
+matrix[is.na(matrix)] <- 0
+ann_colors <- list(
+  Phylum = c("Actinobacteriota" = "orange",
+              "Proteobacteria" = "darkgreen",
+              "Firmicutes" = "purple4",
+              "Bacteroidota" = "lightblue3"))
+
+library(pheatmap)
+
+x<-pheatmap(matrix,cluster_cols = F,
+            color= colorRampPalette(c("grey","black"))(50), angle_col = 45, cellheight = 3,   # changed to 3
+border_color="grey",legend = FALSE, 
+annotation_row = merge_col_tax_annotation,
+         annotation_colors = ann_colors,show_rownames = F)
+# this was exported, rotated, and colors edited slightly for publication figure using Inkscape
+ # ggsave("individual_ovi_asvs.pdf",plot=x, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=10,width=10)
+```
+
+Now that those regressions have been generated and summarized for ASV x development for binary response, what of other features of potential interest? (e.g., development day and offspring wing length)
+
+Day of pupation is not related to abundance of any given taxon in any sample set
+egg
+```{r}
+### day of pupation related to bacterial rel abund in egg water? none!
+
+metadata<-read.csv("c:/Users/aldoa/OneDrive/Desktop/individual_metadata.csv")
+merge_me<-read.csv("c:/Users/aldoa/OneDrive/Desktop/for individual merge.csv")
+
+temp<-merge(metadata,merge_me)
+temp<-temp %>% remove_rownames %>% column_to_rownames(var="X")
+META_16S<-sample_data(temp)
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+
+day_pupation<-read.csv("C:/Users/aldoa/OneDrive/Desktop/Senior thesis_4_23_2024(1)/Senior thesis/inv_ovi_dev_day.csv")
+day_pupation<-day_pupation[c(1:95),c(1:7)]
+# gen_2_wings<-read.csv("C:/Users/aldoa/OneDrive/Desktop/Senior thesis/jp for individual oviposition gen 2 wings.csv")
+
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Egg Water",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+
+egg_water<-day_pupation[,-c(5:7)]
+
+egg_water$Sample<-egg_water$egg
+
+pup_day<-merge(egg_water,ps.melt)
+
+pup_day_final<-pup_day %>% filter(pup.day!="" & pup.day != "NA" & Sample != "NA")
+
+library(lme4)
+library(lmerTest)
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  
+  focal_asv_df<-pup_day_final %>% filter(OTU==focal_asv)
+  
+  # model_temp<-lm(formula = pup.day ~ Abundance, # + (1|Trial) + (1|Trial:Set.ID),
+  #                  data = focal_asv_df)
+  # temp_summary<-summary(model_temp)
+  # init[count,1]<-focal_asv
+  # init[count,2]<-temp_summary$coefficients[2]
+  # init[count,3]<-temp_summary$coefficients[8]
+  # count<-count+1
+  
+  model_temp<-lmerTest::lmer(formula = pup.day ~ Abundance + (1|Trial) + (1|Trial:Set.ID),
+                   data = focal_asv_df)
+  temp_summary<-summary(model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[10]
+  count<-count+1
+}
+
+merge_df<-pup_day_final[,c(1,6,39:43)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+
+merged_time<-unique(setDT(temp_merge)[order(OTU, -OTU)], by = "OTU")
+
+merged_time$FDR <- p.adjust(merged_time$`Uncorrected p-value`, method = "BH" )
+
+sig_pup_time<-merged_time %>% filter(FDR<0.05)
+# sig_pup_time_ever_shared<-sig_pup_time %>% filter(OTU %in% list_ever_shared_downstream)
+```
+mom
+```{r}
+# day of pupation related to mom - none
+metadata<-read.csv("c:/Users/aldoa/OneDrive/Desktop/individual_metadata.csv")
+merge_me<-read.csv("c:/Users/aldoa/OneDrive/Desktop/for individual merge.csv")
+
+temp<-merge(metadata,merge_me)
+temp<-temp %>% remove_rownames %>% column_to_rownames(var="X")
+META_16S<-sample_data(temp)
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Individual Generation 1 Female",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+
+mom<-day_pupation[,-c(4,6:7)]
+
+mom$Sample<-mom$mom
+
+pup_day<-merge(mom,ps.melt)
+
+pup_day_final<-pup_day %>% filter(pup.day!="" & pup.day != "NA" & Sample != "NA")
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  
+  focal_asv_df<-pup_day_final %>% filter(OTU==focal_asv)
+  # 
+  # model_temp<-lm(formula = pup.day ~ Abundance, # + (1|Trial) + (1|Trial:Set.ID),
+  #                  data = focal_asv_df)
+  # temp_summary<-summary(model_temp)
+  # init[count,1]<-focal_asv
+  # init[count,2]<-temp_summary$coefficients[2]
+  # init[count,3]<-temp_summary$coefficients[8]
+  # count<-count+1
+  # 
+  model_temp<-lmerTest::lmer(formula = pup.day ~ Abundance + (1|Trial) + (1|Trial:Set.ID),
+                   data = focal_asv_df)
+  temp_summary<-summary(model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[10]
+  count<-count+1
+}
+
+merge_df<-pup_day_final[,c(1,6,39:43)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+
+merged_time<-unique(setDT(temp_merge)[order(OTU, -OTU)], by = "OTU")
+
+merged_time$FDR <- p.adjust(merged_time$`Uncorrected p-value`, method = "BH" )
+
+sig_pup_time<-merged_time %>% filter(FDR<0.05)
+# sig_pup_time_ever_shared<-sig_pup_time %>% filter(OTU %in% list_ever_shared_downstream)
+```
+dad
+```{r}
+# day of pupation related to dad - none
+
+metadata<-read.csv("c:/Users/aldoa/OneDrive/Desktop/individual_metadata.csv")
+merge_me<-read.csv("c:/Users/aldoa/OneDrive/Desktop/for individual merge.csv")
+
+temp<-merge(metadata,merge_me)
+temp<-temp %>% remove_rownames %>% column_to_rownames(var="X")
+META_16S<-sample_data(temp)
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Generation 1 Male Pool",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+
+dad<-day_pupation[,-c(4:5,7)]
+
+dad$Sample<-dad$dad
+
+pup_day<-merge(dad,ps.melt)
+
+pup_day_final<-pup_day %>% filter(pup.day!="" & pup.day != "NA" & Sample != "NA")
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  
+  focal_asv_df<-pup_day_final %>% filter(OTU==focal_asv)
+ 
+  # model_temp<-lm(formula = pup.day ~ Abundance, # + (1|Trial) + (1|Trial:Set.ID),
+  #                  data = focal_asv_df)
+  # temp_summary<-summary(model_temp)
+  # init[count,1]<-focal_asv
+  # init[count,2]<-temp_summary$coefficients[2]
+  # init[count,3]<-temp_summary$coefficients[8]
+  # count<-count+1
+   
+ model_temp<-lmerTest::lmer(formula = pup.day ~ Abundance + (1|Trial) + (1|Trial:Set.ID),
+                   data = focal_asv_df)
+  temp_summary<-summary(model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[10]
+  count<-count+1
+}
+
+merge_df<-pup_day_final[,c(1,6,39:43)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+
+merged_time<-unique(setDT(temp_merge)[order(OTU, -OTU)], by = "OTU")
+
+merged_time$FDR <- p.adjust(merged_time$`Uncorrected p-value`, method = "BH" )
+
+sig_pup_time<-merged_time %>% filter(FDR<0.05)
+```
+pup
+```{r}
+# day of pupation related to pup h2o - none
+
+metadata<-read.csv("c:/Users/aldoa/OneDrive/Desktop/individual_metadata.csv")
+merge_me<-read.csv("c:/Users/aldoa/OneDrive/Desktop/for individual merge.csv")
+
+temp<-merge(metadata,merge_me)
+temp<-temp %>% remove_rownames %>% column_to_rownames(var="X")
+META_16S<-sample_data(temp)
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Pupation Water" | sample_data(meta_variable_physeq)$ovi_sample_type == "Arrested Water",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+
+pup<-day_pupation[,-c(4:6)]
+
+pup$Sample<-pup$pup
+
+pup_day<-merge(pup,ps.melt)
+
+pup_day_final<-pup_day %>% filter(pup.day!="" & pup.day != "NA" & Sample != "NA")
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  
+  focal_asv_df<-pup_day_final %>% filter(OTU==focal_asv)
+  
+  # model_temp<-lm(formula = pup.day ~ Abundance, # + (1|Trial) + (1|Trial:Set.ID),
+  #                  data = focal_asv_df)
+  # temp_summary<-summary(model_temp)
+  # init[count,1]<-focal_asv
+  # init[count,2]<-temp_summary$coefficients[2]
+  # init[count,3]<-temp_summary$coefficients[8]
+  # count<-count+1
+  
+ model_temp<-lmerTest::lmer(formula = pup.day ~ Abundance + (1|Trial) + (1|Trial:Set.ID),
+                   data = focal_asv_df)
+  temp_summary<-summary(model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[10]
+  count<-count+1
+}
+
+merge_df<-pup_day_final[,c(1,6,39:43)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+
+merged_time<-unique(setDT(temp_merge)[order(OTU, -OTU)], by = "OTU")
+
+merged_time$FDR <- p.adjust(merged_time$`Uncorrected p-value`, method = "BH" )
+
+sig_pup_time<-merged_time %>% filter(FDR<0.05)
+```
+
+Wing length (males and females separately) are not related to abundance of any given taxon in any sample set
+egg
+```{r}
+gen_2_wings<-read.csv("C:/Users/aldoa/OneDrive/Desktop/Senior thesis_4_23_2024(1)/Senior thesis/jp for individual oviposition gen 2 wings.csv")
+
+### gen2 length related to bacterial rel abund in egg water? 
+
+##males first
+
+metadata<-read.csv("c:/Users/aldoa/OneDrive/Desktop/individual_metadata.csv")
+merge_me<-read.csv("c:/Users/aldoa/OneDrive/Desktop/for individual merge.csv")
+
+temp<-merge(metadata,merge_me)
+temp<-temp %>% remove_rownames %>% column_to_rownames(var="X")
+META_16S<-sample_data(temp)
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Egg Water",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+
+egg_water<-gen_2_wings[,-c(8:10)]
+egg_water<- egg_water %>% filter(Sex=="M")
+
+egg_water$Sample<-egg_water$egg
+
+egg_length<-merge(egg_water,ps.melt)
+
+egg_length_final<-egg_length %>% filter(Length..mm.!="" & Length..mm. != "NA" & Sample != "NA")
+
+library(lme4)
+library(lmerTest)
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  
+  focal_asv_df<-egg_length_final %>% filter(OTU==focal_asv)
+  
+  # model_temp<-lm(formula = pup.day ~ Abundance, # + (1|Trial) + (1|Trial:Set.ID),
+  #                  data = focal_asv_df)
+  # temp_summary<-summary(model_temp)
+  # init[count,1]<-focal_asv
+  # init[count,2]<-temp_summary$coefficients[2]
+  # init[count,3]<-temp_summary$coefficients[8]
+  # count<-count+1
+  
+  model_temp<-lmerTest::lmer(formula = Length..mm. ~ Abundance + (1|Trial) + (1|Trial:Set.ID),
+                   data = focal_asv_df)
+  temp_summary<-summary(model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[10]
+  count<-count+1
+}
+
+merge_df<-egg_length_final[,c(1,9,41:46)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+
+merged_time<-unique(setDT(temp_merge)[order(OTU, -OTU)], by = "OTU")
+
+merged_time$FDR <- p.adjust(merged_time$`Uncorrected p-value`, method = "BH" )
+
+sig_length<-merged_time %>% filter(FDR<0.05)
+# sig_length_ever_shared<-sig_length %>% filter(OTU %in% list_ever_shared_downstream)
+```
+```{r}
+## females
+
+egg_water<-gen_2_wings[,-c(8:10)]
+egg_water<- egg_water %>% filter(Sex=="F")
+
+egg_water$Sample<-egg_water$egg
+
+egg_length<-merge(egg_water,ps.melt)
+
+egg_length_final<-egg_length %>% filter(Length..mm.!="" & Length..mm. != "NA" & Sample != "NA")
+
+library(lme4)
+library(lmerTest)
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  
+  focal_asv_df<-egg_length_final %>% filter(OTU==focal_asv)
+  
+  # model_temp<-lm(formula = pup.day ~ Abundance, # + (1|Trial) + (1|Trial:Set.ID),
+  #                  data = focal_asv_df)
+  # temp_summary<-summary(model_temp)
+  # init[count,1]<-focal_asv
+  # init[count,2]<-temp_summary$coefficients[2]
+  # init[count,3]<-temp_summary$coefficients[8]
+  # count<-count+1
+  
+  model_temp<-lmerTest::lmer(formula = Length..mm. ~ Abundance + (1|Trial) + (1|Trial:Set.ID),
+                   data = focal_asv_df)
+  temp_summary<-summary(model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[10]
+  count<-count+1
+}
+
+merge_df<-egg_length_final[,c(1,9,41:46)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+
+merged_time<-unique(setDT(temp_merge)[order(OTU, -OTU)], by = "OTU")
+
+merged_time$FDR <- p.adjust(merged_time$`Uncorrected p-value`, method = "BH" )
+
+sig_length<-merged_time %>% filter(FDR<0.05)
+# sig_length_ever_shared<-sig_length %>% filter(OTU %in% list_ever_shared_downstream)
+
+```
+mom
+```{r}
+gen_2_wings<-read.csv("C:/Users/aldoa/OneDrive/Desktop/Senior thesis_4_23_2024(1)/Senior thesis/jp for individual oviposition gen 2 wings.csv")
+
+### gen2 length related to bacterial rel abund in egg water? 
+
+##males first
+
+metadata<-read.csv("c:/Users/aldoa/OneDrive/Desktop/individual_metadata.csv")
+merge_me<-read.csv("c:/Users/aldoa/OneDrive/Desktop/for individual merge.csv")
+
+temp<-merge(metadata,merge_me)
+temp<-temp %>% remove_rownames %>% column_to_rownames(var="X")
+META_16S<-sample_data(temp)
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Individual Generation 1 Female",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+
+mom<-gen_2_wings[,-c(7,9,10)]
+mom<- mom %>% filter(Sex=="M")
+
+mom$Sample<-mom$mom
+
+length<-merge(mom,ps.melt)
+
+length_final<-length %>% filter(Length..mm.!="" & Length..mm. != "NA" & Sample != "NA")
+
+library(lme4)
+library(lmerTest)
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  
+  focal_asv_df<-length_final %>% filter(OTU==focal_asv)
+  
+  # model_temp<-lm(formula = pup.day ~ Abundance, # + (1|Trial) + (1|Trial:Set.ID),
+  #                  data = focal_asv_df)
+  # temp_summary<-summary(model_temp)
+  # init[count,1]<-focal_asv
+  # init[count,2]<-temp_summary$coefficients[2]
+  # init[count,3]<-temp_summary$coefficients[8]
+  # count<-count+1
+  
+  model_temp<-lmerTest::lmer(formula = Length..mm. ~ Abundance + (1|Trial) + (1|Trial:Set.ID),
+                   data = focal_asv_df)
+  temp_summary<-summary(model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[10]
+  count<-count+1
+}
+
+merge_df<-length_final[,c(1,9,41:46)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+
+merged_time<-unique(setDT(temp_merge)[order(OTU, -OTU)], by = "OTU")
+
+merged_time$FDR <- p.adjust(merged_time$`Uncorrected p-value`, method = "BH" )
+
+sig_length<-merged_time %>% filter(FDR<0.05)
+# sig_length_ever_shared<-sig_length %>% filter(OTU %in% list_ever_shared_downstream)
+```
+```{r}
+## females
+
+mom<-gen_2_wings[,-c(7,9,10)]
+mom<- mom %>% filter(Sex=="F")
+
+mom$Sample<-mom$mom
+
+length<-merge(mom,ps.melt)
+
+length_final<-length %>% filter(Length..mm.!="" & Length..mm. != "NA" & Sample != "NA")
+
+library(lme4)
+library(lmerTest)
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  
+  focal_asv_df<-length_final %>% filter(OTU==focal_asv)
+  
+  # model_temp<-lm(formula = pup.day ~ Abundance, # + (1|Trial) + (1|Trial:Set.ID),
+  #                  data = focal_asv_df)
+  # temp_summary<-summary(model_temp)
+  # init[count,1]<-focal_asv
+  # init[count,2]<-temp_summary$coefficients[2]
+  # init[count,3]<-temp_summary$coefficients[8]
+  # count<-count+1
+  
+  model_temp<-lmerTest::lmer(formula = Length..mm. ~ Abundance + (1|Trial) + (1|Trial:Set.ID),
+                   data = focal_asv_df)
+  temp_summary<-summary(model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[10]
+  count<-count+1
+}
+
+merge_df<-length_final[,c(1,9,41:46)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+
+merged_length<-unique(setDT(temp_merge)[order(OTU, -OTU)], by = "OTU")
+
+merged_length$FDR <- p.adjust(merged_length$`Uncorrected p-value`, method = "BH" )
+
+sig_length<-merged_length %>% filter(FDR<0.05)
+# sig_length_ever_shared<-sig_length %>% filter(OTU %in% list_ever_shared_downstream)
+
+```
+dad
+```{r}
+gen_2_wings<-read.csv("C:/Users/aldoa/OneDrive/Desktop/Senior thesis_4_23_2024(1)/Senior thesis/jp for individual oviposition gen 2 wings.csv")
+
+### gen2 length related to bacterial rel abund in egg water? 
+
+##males first
+
+metadata<-read.csv("c:/Users/aldoa/OneDrive/Desktop/individual_metadata.csv")
+merge_me<-read.csv("c:/Users/aldoa/OneDrive/Desktop/for individual merge.csv")
+
+temp<-merge(metadata,merge_me)
+temp<-temp %>% remove_rownames %>% column_to_rownames(var="X")
+META_16S<-sample_data(temp)
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Generation 1 Male Pool",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+
+dad<-gen_2_wings[,-c(7,8,10)]
+dad<- dad %>% filter(Sex=="M")
+
+dad$Sample<-dad$dad
+
+length<-merge(dad,ps.melt)
+
+length_final<-length %>% filter(Length..mm.!="" & Length..mm. != "NA" & Sample != "NA")
+
+library(lme4)
+library(lmerTest)
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  
+  focal_asv_df<-length_final %>% filter(OTU==focal_asv)
+  
+  # model_temp<-lm(formula = pup.day ~ Abundance, # + (1|Trial) + (1|Trial:Set.ID),
+  #                  data = focal_asv_df)
+  # temp_summary<-summary(model_temp)
+  # init[count,1]<-focal_asv
+  # init[count,2]<-temp_summary$coefficients[2]
+  # init[count,3]<-temp_summary$coefficients[8]
+  # count<-count+1
+  
+  model_temp<-lmerTest::lmer(formula = Length..mm. ~ Abundance + (1|Trial) + (1|Trial:Set.ID),
+                   data = focal_asv_df)
+  temp_summary<-summary(model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[10]
+  count<-count+1
+}
+
+merge_df<-length_final[,c(1,9,41:46)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+
+merged_time<-unique(setDT(temp_merge)[order(OTU, -OTU)], by = "OTU")
+
+merged_time$FDR <- p.adjust(merged_time$`Uncorrected p-value`, method = "BH" )
+
+sig_length<-merged_time %>% filter(FDR<0.05)
+# sig_length_ever_shared<-sig_length %>% filter(OTU %in% list_ever_shared_downstream)
+```
+```{r}
+## females
+
+dad<-gen_2_wings[,-c(7,8,10)]
+dad<- dad %>% filter(Sex=="F")
+
+dad$Sample<-dad$dad
+
+length<-merge(dad,ps.melt)
+
+length_final<-length %>% filter(Length..mm.!="" & Length..mm. != "NA" & Sample != "NA")
+
+library(lme4)
+library(lmerTest)
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  
+  focal_asv_df<-length_final %>% filter(OTU==focal_asv)
+  
+  # model_temp<-lm(formula = pup.day ~ Abundance, # + (1|Trial) + (1|Trial:Set.ID),
+  #                  data = focal_asv_df)
+  # temp_summary<-summary(model_temp)
+  # init[count,1]<-focal_asv
+  # init[count,2]<-temp_summary$coefficients[2]
+  # init[count,3]<-temp_summary$coefficients[8]
+  # count<-count+1
+  
+  model_temp<-lmerTest::lmer(formula = Length..mm. ~ Abundance + (1|Trial) + (1|Trial:Set.ID),
+                   data = focal_asv_df)
+  temp_summary<-summary(model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[10]
+  count<-count+1
+}
+
+merge_df<-length_final[,c(1,9,41:46)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+
+merged_length<-unique(setDT(temp_merge)[order(OTU, -OTU)], by = "OTU")
+
+merged_length$FDR <- p.adjust(merged_length$`Uncorrected p-value`, method = "BH" )
+
+sig_length<-merged_length %>% filter(FDR<0.05)
+# sig_length_ever_shared<-sig_length %>% filter(OTU %in% list_ever_shared_downstream)
+```
+pup
+```{r}
+gen_2_wings<-read.csv("C:/Users/aldoa/OneDrive/Desktop/Senior thesis_4_23_2024(1)/Senior thesis/jp for individual oviposition gen 2 wings.csv")
+
+### gen2 length related to bacterial rel abund in egg water? 
+
+##males first
+
+metadata<-read.csv("c:/Users/aldoa/OneDrive/Desktop/individual_metadata.csv")
+merge_me<-read.csv("c:/Users/aldoa/OneDrive/Desktop/for individual merge.csv")
+
+temp<-merge(metadata,merge_me)
+temp<-temp %>% remove_rownames %>% column_to_rownames(var="X")
+META_16S<-sample_data(temp)
+meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
+
+meta_variable_physeq<-prune_samples(sample_data(meta_variable_physeq)$ovi_sample_type == "Pupation Water" | sample_data(meta_variable_physeq)$ovi_sample_type == "Arrested Water",meta_variable_physeq)
+meta_variable_physeq = prune_taxa(taxa_sums(meta_variable_physeq) > 0, meta_variable_physeq)
+meta_variable_physeq_transformed<-microbiome::transform(meta_variable_physeq, "clr")
+
+# list of asvs
+list<-rownames(as.data.frame(otu_table(meta_variable_physeq_transformed)))
+ps.melt = psmelt(meta_variable_physeq_transformed)
+
+pup<-gen_2_wings[,-c(7,8,9)]
+pup<- pup %>% filter(Sex=="M")
+
+pup$Sample<-pup$pup
+
+length<-merge(pup,ps.melt)
+
+length_final<-length %>% filter(Length..mm.!="" & Length..mm. != "NA" & Sample != "NA")
+
+library(lme4)
+library(lmerTest)
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  
+  focal_asv_df<-length_final %>% filter(OTU==focal_asv)
+  
+  # model_temp<-lm(formula = pup.day ~ Abundance, # + (1|Trial) + (1|Trial:Set.ID),
+  #                  data = focal_asv_df)
+  # temp_summary<-summary(model_temp)
+  # init[count,1]<-focal_asv
+  # init[count,2]<-temp_summary$coefficients[2]
+  # init[count,3]<-temp_summary$coefficients[8]
+  # count<-count+1
+  
+  model_temp<-lmerTest::lmer(formula = Length..mm. ~ Abundance + (1|Trial) + (1|Trial:Set.ID),
+                   data = focal_asv_df)
+  temp_summary<-summary(model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[10]
+  count<-count+1
+}
+
+merge_df<-length_final[,c(1,9,41:46)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+
+merged_time<-unique(setDT(temp_merge)[order(OTU, -OTU)], by = "OTU")
+
+merged_time$FDR <- p.adjust(merged_time$`Uncorrected p-value`, method = "BH" )
+
+sig_length<-merged_time %>% filter(FDR<0.05)
+# sig_length_ever_shared<-sig_length %>% filter(OTU %in% list_ever_shared_downstream)
+```
+```{r}
+## females
+
+pup<-gen_2_wings[,-c(7,8,9)]
+pup<- pup %>% filter(Sex=="F")
+
+pup$Sample<-pup$pup
+
+length<-merge(pup,ps.melt)
+
+length_final<-length %>% filter(Length..mm.!="" & Length..mm. != "NA" & Sample != "NA")
+
+library(lme4)
+library(lmerTest)
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  
+  focal_asv_df<-length_final %>% filter(OTU==focal_asv)
+  
+  # model_temp<-lm(formula = pup.day ~ Abundance, # + (1|Trial) + (1|Trial:Set.ID),
+  #                  data = focal_asv_df)
+  # temp_summary<-summary(model_temp)
+  # init[count,1]<-focal_asv
+  # init[count,2]<-temp_summary$coefficients[2]
+  # init[count,3]<-temp_summary$coefficients[8]
+  # count<-count+1
+  
+  model_temp<-lmerTest::lmer(formula = Length..mm. ~ Abundance + (1|Trial) + (1|Trial:Set.ID),
+                   data = focal_asv_df)
+  temp_summary<-summary(model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[10]
+  count<-count+1
+}
+
+merge_df<-length_final[,c(1,9,41:46)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+
+merged_length<-unique(setDT(temp_merge)[order(OTU, -OTU)], by = "OTU")
+
+merged_length$FDR <- p.adjust(merged_length$`Uncorrected p-value`, method = "BH" )
+
+sig_length<-merged_length %>% filter(FDR<0.05)
+# sig_length_ever_shared<-sig_length %>% filter(OTU %in% list_ever_shared_downstream)
+```
+
+Make a venn diagram comparisons of adults, egg water, and pupation water -- then calculate what proportion the shared taxa comprise of each set
+```{r}
+#only in adults as well
+subset_eggs<-eggs_asvs[eggs_asvs %in% adults]
+subset_late_water<-late_water_asvs[late_water_asvs %in% adults]
+
+y<-list(
+  `Adult ASVs` = adults,
+  `Egg Water ASVs` = eggs_asvs,
+  `Late Water ASVs` = late_water_asvs
+  )  
+ven<-ggvenn(
+  y, 
+  # fill_color = c("#0073C2FF", "#EFC000FF", "#868686FF"),
+  stroke_size = 1, set_name_size = 6, text_size = 6, show_percentage = FALSE
+  )
+# ggsave("gno_venn.pdf",plot=w, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=4,width=9)
+
+z<-list(
+  `Adult ASVs` = adults,
+  `Egg Water ASVs` = subset_eggs,
+  `Late Water ASVs` = subset_late_water
+  )  
+ven_1<-ggvenn(
+  z, 
+  # fill_color = c("#0073C2FF", "#EFC000FF", "#868686FF"),
+  stroke_size = 1, set_name_size = 6, text_size = 6, show_percentage = FALSE
+  )
+
+venn_base<-venn(list(adults,subset_eggs,subset_late_water))
+
+intersections<-attr(venn_base,"intersections")
+# intersections$`Field Water:Lab Water`
+
+# length(intersections$`A:B`)
+# length(intersections$`A:B:C`)
+# length(intersections$`A:C`)
+
+shared_all<-as.data.frame(c(intersections$`A:B`,intersections$`A:B:C`,intersections$`A:C`))
+
+#make "ever shared" barplot
+
+df_tax<-as.data.frame(tax_table(unsat_removed_physeq))
+
+df_tax$shared_status <- "not shared"
+df_tax$shared_status[rownames(df_tax) %in% shared_all$`c(intersections$\`A:B\`, intersections$\`A:B:C\`, intersections$\`A:C\`)`] <- "shared"
+
+tax_matrix<-as.matrix(df_tax)
+TAX_16S<-tax_table(tax_matrix, errorIfNULL=TRUE)
+
+
+meta<-as.data.frame(as.matrix((sample_data(unsat_removed_physeq))))
+
+meta<-meta %>%
+     mutate(ovi_sample_type = recode(ovi_sample_type, `Generation.1.Male.Pool` = "Mated Males",
+         `Individual.Generation.1.Female` = "Mothers",
+         `Arrested Water` = "Late Water",
+         `Pupation Water` = "Late Water"))
+
+phyloseq_for_shared_relabund<-phyloseq(sample_data(meta), otu_table(unsat_removed_physeq), TAX_16S, phy_tree(unsat_removed_physeq))
+    
+test<-merge_samples(phyloseq_for_shared_relabund,sample_data(phyloseq_for_shared_relabund)$ovi_sample_type, fun=sum)
+
+sample_data(test)
+
+ps.norm = transform_sample_counts(test, function(x) x / sum(x) )
+
+otu_temp<-as.data.frame(as.matrix(otu_table(ps.norm)))
+  otu_temp<-t(otu_temp)
+otu_temp<-cbind(rownames(otu_temp), data.frame(otu_temp, row.names=NULL))
+colnames(otu_temp)[1] <- "ASV name"
+tax_temp<-as.data.frame(as.matrix(tax_table(ps.norm)))
+tax_temp<-cbind(rownames(tax_temp), data.frame(tax_temp, row.names=NULL))
+colnames(tax_temp)[1] <- "ASV name"
+bar_plot_join<-inner_join(otu_temp,tax_temp, by = "ASV name")
+
+library(data.table)
+long <- melt(setDT(bar_plot_join), id.vars = c("Kingdom","Phylum","Class","Order", "Genus","Species", "shared_status"), measure.vars = 2:7)
+
+long_plot<- long %>% filter(variable != "Tray.Water.Sample")
+
+
+long_plot<-long_plot %>%
+     mutate(variable = recode(variable, `Generation.1.Male.Pool` = "Mated Males",
+         `Individual.Generation.1.Female` = "Mothers",
+         Arrested.Water = "Late Water",
+         Pupation.Water = "Late Water"))
+library(viridis)
+long_plot$value<-as.numeric(long_plot$value)
+plot<-long_plot%>%
+    ggplot(aes(x=variable, y=value, fill=shared_status))+
+    geom_col() +
+     xlab("Sample Type")+ ylab("Proportion of Reads")+
+    theme_cowplot() + theme(text = element_text(size=15)) + scale_y_continuous(expand = c(0,0)) + theme(axis.text.x = element_text(hjust = 0.5, vjust=.1, size=15), axis.text.y = element_text(size=15)) + scale_fill_manual(values= c("grey50","#8cd752"))
+
+plot$labels$fill<-"Shared status"
+plot
+
+plot$data
+
+sum(plot$data$value[plot$data$variable=="Mated Males" & plot$data$shared_status=="shared"])
+sum(plot$data$value[plot$data$variable=="Mothers" & plot$data$shared_status=="shared"])
+sum(plot$data$value[plot$data$variable=="Egg.Water" & plot$data$shared_status=="shared"])
+
+sum(plot$data$value[plot$data$variable=="Late.Water" & plot$data$shared_status=="shared" & plot$data$value != 0])
+length(plot$data$value[plot$data$variable=="Pupation.Water" & plot$data$shared_status=="not shared" & plot$data$value != 0])
+```
+
+**Diversity analyses**
+Estimate sample diversity
+```{r}
+# calculate richness and load metadata
+library(lme4)
+ovi_diversity_df<-breakaway::breakaway(unsat_removed_physeq)
+rich_values<-ovi_diversity_df %>% summary %$% estimate
+rich_error<-ovi_diversity_df %>% summary %$% error
+
+f<-as.data.frame(rich_values)
+f<-as.data.frame(f)
+colnames(f)="Breakaway Estimate of Richness"
+rich_final <- tibble::rownames_to_column(f, "samples")
+f<-as.data.frame(rich_error)
+f<-as.data.frame(f)
+colnames(f)="Breakaway Error"
+rich_error <- tibble::rownames_to_column(f, "samples")
+merged_rich<-merge(rich_final,rich_error)
+
+# shannon
+library(DivNet)
+pick_base(t(otu_table(unsat_removed_physeq)), automatic_cutoff = TRUE)
+ #  e7c9f275786c832873052c0e78d72efc 
+shannon<-divnet(unsat_removed_physeq, base= "e7c9f275786c832873052c0e78d72efc")
+shannon_estimates <- shannon$shannon %>% summary %$% estimate
+shannon_ses <- sqrt(shannon$`shannon-variance`)
+
+f<-as.data.frame(shannon_estimates)
+f<-as.data.frame(f)
+colnames(f)="Shannon Sample-Wise"
+shannon_final<- tibble::rownames_to_column(f, "samples")
+f<-as.data.frame(shannon_ses)
+f<-as.data.frame(f)
+colnames(f)="Shannon Error"
+shannon_error <- tibble::rownames_to_column(f, "samples")
+
+merged_shannon<-merge(shannon_final,shannon_error)
+alpha_merged<-merge(merged_shannon,merged_rich)
+
+metadata<- tibble::rownames_to_column(temp, "samples")
+merged<-merge(alpha_merged,metadata)
+# saveRDS(merged,"individal_ovi_alpha_div")
+
+####### tangent to make sample detail for supplementary table 1
+
+
+a<-plot_richness(unsat_removed_physeq, x = "samples", measures="Observed")
+summary<-a$data
+observed<-summary[,c(28,30)]
+Total_Reads<-sample_sums(unsat_removed_physeq)
+
+f<-as.data.frame(Total_Reads)
+f<-as.data.frame(f)
+colnames(f)="Total Reads"
+total.reads <- tibble::rownames_to_column(f, "samples")
+
+total_reads_obs<-merge(observed,total.reads)
+
+supp_table_1<-merge(total_reads_obs,merged)
+supp_table_1<-supp_table_1[,c(1,14,9,3,2,6,7,4,5)]
+colnames(supp_table_1)[1]<-"Sample ID"
+colnames(supp_table_1)[2]<-"Sample Type"
+colnames(supp_table_1)[3]<-"Pre-pooling DNA (ng/uL)"
+colnames(supp_table_1)[5]<-"Observed ASVs"
+
+# write.csv(supp_table_1,"Supplementary Table 1.csv")
+
+#########
+```
+
+Hard to say if relationships are robust to uncertainty...
+Hatch
+Maternal
+```{r}
+# filter as needed
+maternal<-merged %>% filter(ovi_sample_type=="Individual Generation 1 Female")
+# Number of simulations
+n_simulations <- 1000
+# Placeholder for results
+results <- matrix(NA, n_simulations, 2) # Intercept and slope coefficients
+# Simulate diversity and fit models
+for (i in 1:n_simulations) {
+  # Simulate diversity predictor from normal distribution
+  maternal$diversity_simulated <- rnorm(
+    nrow(maternal),
+    mean = maternal$`Breakaway Estimate of Richness`,
+    sd = maternal$`Breakaway Error`
+  )
+  # Fit the mixed-effects model with simulated diversity
+  model <- glm(
+    Hatch_Rate ~ diversity_simulated + (1 | ovi_trial),
+    data = maternal,
+    family = binomial,
+    weights = Eggs_Post_Sterile
+  )
+  
+  # Store coefficients
+  results[i, ] <- model$coefficients[2] # Extract fixed-effect coefficients
+}
+
+# Compute observed test statistic
+observed_model <- glm(
+  Hatch_Rate ~ `Breakaway Estimate of Richness` + (1 | ovi_trial),
+  data = maternal,
+  family = binomial,
+  weights = Eggs_Post_Sterile
+)
+observed_coef <- observed_model$coefficients[2]
+
+# Calculate p-value for diversity_simulated
+simulated_coefs <- results[, 2] # Extract diversity_simulated coefficients
+
+p_value <- 2 * min(
+  mean(simulated_coefs >= observed_coef), 
+  mean(simulated_coefs <= observed_coef)
+)
+
+# Display results
+cat("Observed Coefficient:", observed_coef, "\n")
+cat("Simulated Mean Coefficient:", mean(simulated_coefs), "\n")
+cat("P-value for diversity_est:", p_value, "\n")
+```
+maternal simple no modeled uncertainty - more taxa lower hatch, no shannon (trend)
+```{r}
+richness_model <- glm(
+  Hatch_Rate ~ `Breakaway Estimate of Richness` + (1 | ovi_trial),
+  data = maternal,
+  family = binomial,
+  weights = Eggs_Post_Sterile
+)
+summary(richness_model)
+shannon_model <- glm(
+  Hatch_Rate ~ `Shannon Sample-Wise` + (1 | ovi_trial),
+  data = maternal,
+  family = binomial,
+  weights = Eggs_Post_Sterile
+)
+summary(shannon_model)
+```
+
+Paternal
+```{r}
+# filter as needed
+paternal<-merged %>% filter(ovi_sample_type=="Generation 1 Male Pool")
+
+# Number of simulations
+n_simulations <- 1000
+
+# Placeholder for results
+results <- matrix(NA, n_simulations, 2) # Intercept and slope coefficients
+
+# Simulate diversity and fit models
+for (i in 1:n_simulations) {
+  # Simulate diversity predictor from normal distribution
+  paternal$diversity_simulated <- rnorm(
+    nrow(paternal),
+    mean = paternal$`Shannon Sample-Wise`,
+    sd = paternal$`Shannon Error`
+  )
+  
+  # Fit the mixed-effects model with simulated diversity
+  model <- glm(
+    Hatch_Rate ~ diversity_simulated + (1 | ovi_trial),
+    data = paternal,
+    family = binomial,
+    weights = Eggs_Post_Sterile
+  )
+  
+  # Store coefficients
+  results[i, ] <- model$coefficients[2] # Extract fixed-effect coefficients
+}
+
+# Compute observed test statistic
+observed_model <- glm(
+  Hatch_Rate ~ `Shannon Sample-Wise` + (1 | ovi_trial),
+  data = paternal,
+  family = binomial,
+  weights = Eggs_Post_Sterile
+)
+observed_coef <- observed_model$coefficients[2]
+
+# Calculate p-value for diversity_simulated
+simulated_coefs <- results[, 2] # Extract diversity_simulated coefficients
+p_value <- 2 * min(
+  mean(simulated_coefs >= observed_coef), 
+  mean(simulated_coefs <= observed_coef)
+)
+
+# Display results
+cat("Observed Coefficient:", observed_coef, "\n")
+cat("Simulated Mean Coefficient:", mean(simulated_coefs), "\n")
+cat("P-value for diversity_est:", p_value, "\n")
+```
+paternal simple - nothing
+```{r}
+richness_model <- glm(
+  Hatch_Rate ~ `Breakaway Estimate of Richness` + (1 | ovi_trial),
+  data = paternal,
+  family = binomial,
+  weights = Eggs_Post_Sterile
+)
+summary(richness_model)
+shannon_model <- glm(
+  Hatch_Rate ~ `Shannon Sample-Wise` + (1 | ovi_trial),
+  data = paternal,
+  family = binomial,
+  weights = Eggs_Post_Sterile
+)
+summary(shannon_model)
+```
+Egg
+```{r}
+# filter as needed
+eggs<-merged %>% filter(ovi_sample_type=="Egg Water")
+
+# Number of simulations
+n_simulations <- 1000
+
+# Placeholder for results
+results <- matrix(NA, n_simulations, 2) # Intercept and slope coefficients
+
+# Simulate diversity and fit models
+for (i in 1:n_simulations) {
+  # Simulate diversity predictor from normal distribution
+  eggs$diversity_simulated <- rnorm(
+    nrow(eggs),
+    mean = eggs$`Shannon Sample-Wise`,
+    sd = eggs$`Shannon Error`
+  )
+  
+  # Fit the mixed-effects model with simulated diversity
+  model <- glm(
+    Hatch_Rate ~ diversity_simulated + (1 | ovi_trial),
+    data = eggs,
+    family = binomial,
+    weights = Eggs_Post_Sterile
+  )
+  
+  # Store coefficients
+  results[i, ] <- model$coefficients[2] # Extract fixed-effect coefficients
+}
+
+# Compute observed test statistic
+observed_model <- glm(
+  Hatch_Rate ~ `Shannon Sample-Wise` + (1 | ovi_trial),
+  data = eggs,
+  family = binomial,
+  weights = Eggs_Post_Sterile
+)
+observed_coef <- observed_model$coefficients[2]
+
+# Calculate p-value for diversity_simulated
+simulated_coefs <- results[, 2] # Extract diversity_simulated coefficients
+p_value <- 2 * min(
+  mean(simulated_coefs >= observed_coef), 
+  mean(simulated_coefs <= observed_coef)
+)
+
+# Display results
+cat("Observed Coefficient:", observed_coef, "\n")
+cat("Simulated Mean Coefficient:", mean(simulated_coefs), "\n")
+cat("P-value for diversity_est:", p_value, "\n")
+```
+egg simple - nothing
+```{r}
+richness_model <- glm(
+  Hatch_Rate ~ `Breakaway Estimate of Richness` + (1 | ovi_trial),
+  data = eggs,
+  family = binomial,
+  weights = Eggs_Post_Sterile
+)
+summary(richness_model)
+shannon_model <- glm(
+  Hatch_Rate ~ `Shannon Sample-Wise` + (1 | ovi_trial),
+  data = eggs,
+  family = binomial,
+  weights = Eggs_Post_Sterile
+)
+summary(shannon_model)
+```
+Survival
+```{r}
+# filter as needed
+late_water<-merged %>% filter(ovi_sample_type=="Pupation Water" | ovi_sample_type=="Arrested Water")
+
+# Number of simulations
+n_simulations <- 1000
+
+# Placeholder for results
+results <- matrix(NA, n_simulations, 2) # Intercept and slope coefficients
+
+# Simulate diversity and fit models
+for (i in 1:n_simulations) {
+  # Simulate diversity predictor from normal distribution
+  late_water$diversity_simulated <- rnorm(
+    nrow(late_water),
+    mean = late_water$`Shannon Sample-Wise`,
+    sd = late_water$`Shannon Error`
+  )
+  
+  # Fit the mixed-effects model with simulated diversity
+  model <- glm(
+    1-death_rate ~ diversity_simulated + (1 | ovi_trial),
+    data = late_water,
+    family = binomial,
+    weights = Tot_Larvae
+  )
+  
+  # Store coefficients
+  results[i, ] <- model$coefficients[2] # Extract fixed-effect coefficients
+}
+
+# Compute observed test statistic
+observed_model <- glm(
+  1-death_rate ~ `Shannon Sample-Wise` + (1 | ovi_trial),
+  data = late_water,
+  family = binomial,
+  weights = Tot_Larvae
+)
+observed_coef <- observed_model$coefficients[2]
+
+# Calculate p-value for diversity_simulated
+simulated_coefs <- results[, 2] # Extract diversity_simulated coefficients
+
+p_value <- mean(abs(simulated_coefs) >= abs(observed_coef))
+
+# Display results
+cat("Observed Coefficient:", observed_coef, "\n")
+cat("Simulated Mean Coefficient:", mean(simulated_coefs), "\n")
+cat("P-value for diversity_est:", p_value, "\n")
+
+summary(observed_model)
+```
+
+survival simple
+mom - nope
+```{r}
+richness_model <- glm(
+  1-death_rate ~ `Breakaway Estimate of Richness` + (1 | ovi_trial),
+  data = maternal,
+  family = binomial,
+  weights = Tot_Larvae
+)
+summary(richness_model)
+shannon_model <- glm(
+  1-death_rate ~ `Shannon Sample-Wise` + (1 | ovi_trial),
+  data = maternal,
+  family = binomial,
+  weights = Tot_Larvae
+)
+summary(shannon_model)
+```
+paternal - both significantly increase survival 
+```{r}
+richness_model <- glm(
+  1-death_rate ~ `Breakaway Estimate of Richness` + (1 | ovi_trial),
+  data = paternal,
+  family = binomial,
+  weights = Tot_Larvae
+)
+summary(richness_model)
+shannon_model <- glm(
+  1-death_rate ~ `Shannon Sample-Wise` + (1 | ovi_trial),
+  data = paternal,
+  family = binomial,
+  weights = Tot_Larvae
+)
+summary(shannon_model)
+```
+eggs - both significantly increase survival 
+```{r}
+richness_model <- glm(
+  1-death_rate ~ `Breakaway Estimate of Richness` + (1 | ovi_trial),
+  data = eggs,
+  family = binomial,
+  weights = Tot_Larvae
+)
+summary(richness_model)
+shannon_model <- glm(
+  1-death_rate ~ `Shannon Sample-Wise` + (1 | ovi_trial),
+  data = eggs,
+  family = binomial,
+  weights = Tot_Larvae
+)
+summary(shannon_model)
+```
+late water - both significantly increase survival 
+```{r}
+richness_model <- glm(
+  1-death_rate ~ `Breakaway Estimate of Richness` + (1 | ovi_trial),
+  data = late_water,
+  family = binomial,
+  weights = Tot_Larvae
+)
+summary(richness_model)
+shannon_model <- glm(
+  1-death_rate ~ `Shannon Sample-Wise` + (1 | ovi_trial),
+  data = late_water,
+  family = binomial,
+  weights = Tot_Larvae
+)
+summary(shannon_model)
+```
+pupation simple
+mom - both significantly increase pupation 
+```{r}
+richness_model <- glm(
+  pupation_rate ~ `Breakaway Estimate of Richness` + (1 | ovi_trial),
+  data = maternal,
+  family = binomial,
+  weights = Tot_Larvae
+)
+summary(richness_model)
+shannon_model <- glm(
+  pupation_rate ~ `Shannon Sample-Wise` + (1 | ovi_trial),
+  data = maternal,
+  family = binomial,
+  weights = Tot_Larvae
+)
+summary(shannon_model)
+```
+paternal - nope
+```{r}
+richness_model <- glm(
+  pupation_rate ~ `Breakaway Estimate of Richness` + (1 | ovi_trial),
+  data = paternal,
+  family = binomial,
+  weights = Tot_Larvae
+)
+summary(richness_model)
+shannon_model <- glm(
+  pupation_rate ~ `Shannon Sample-Wise` + (1 | ovi_trial),
+  data = paternal,
+  family = binomial,
+  weights = Tot_Larvae
+)
+summary(shannon_model)
+```
+eggs - both significantly decrease pupation  
+```{r}
+richness_model <- glm(
+  pupation_rate ~ `Breakaway Estimate of Richness` + (1 | ovi_trial),
+  data = eggs,
+  family = binomial,
+  weights = Tot_Larvae
+)
+summary(richness_model)
+shannon_model <- glm(
+  pupation_rate ~ `Shannon Sample-Wise` + (1 | ovi_trial),
+  data = eggs,
+  family = binomial,
+  weights = Tot_Larvae
+)
+summary(shannon_model)
+```
+late water - both significantly decrease pupation 
+```{r}
+richness_model <- glm(
+  pupation_rate ~ `Breakaway Estimate of Richness` + (1 | ovi_trial),
+  data = late_water,
+  family = binomial,
+  weights = Tot_Larvae
+)
+summary(richness_model)
+shannon_model <- glm(
+  pupation_rate ~ `Shannon Sample-Wise` + (1 | ovi_trial),
+  data = late_water,
+  family = binomial,
+  weights = Tot_Larvae
+)
+summary(shannon_model)
+```
+
+
+
+
+

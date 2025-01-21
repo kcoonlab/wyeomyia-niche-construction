@@ -1,0 +1,1043 @@
+---
+title: "master larval passaging analysis"
+author: "Aldo A. Arellano"
+date: "2024-11-18"
+output: html_document
+---
+
+**Larval passaging data analysis**
+DELETE THIS
+```{r}
+seq_object = readRDS("c:/Users/aldoa/OneDrive/Desktop/Larval_Passaging_Analysis_AA/Analysis/gg2 taxonomy/phyloseq/final LP phyloseq")
+sample_data(seq_object)
+```
+
+Raw sequence handling:
+```{bash}
+# sample code at the command-line for installing qiime2 with conda:
+conda env create -n qiime2-amplicon-2024.5 --file https://data.qiime2.org/distro/amplicon/qiime2-amplicon-2024.5-py39-linux-conda.yml
+
+# begin by activating conda environment 
+conda activate qiime2-amplicon-2024.5
+```
+
+```{bash}
+# created directory called qiime_intermediates at '[YOUR WORKING DIRECTORY]/qiime_intermediates'
+# no quotations in directory when specifying at the command line
+mkdir qiime_intermediates
+# the object that is the demultiplexed paired end 'artifact' is called demux-paired-end.qza
+qiime tools import --type 'SampleData[PairedEndSequencesWithQuality]' --input-path "[LOCATION OF READS]" --input-format CasavaOneEightSingleLanePerSampleDirFmt --output-path "[YOUR WORKING DIRECTORY]"/qiime_intermediates/demux-paired-end.qza
+
+cd larval_passaging/qiime_intermediates
+qiime demux summarize --i-data ./demux-paired-end.qza --o-visualization demux-paired-end.qzv
+```
+
+```{bash}
+# read-joining 
+qiime vsearch merge-pairs --i-demultiplexed-seqs demux-paired-end.qza --o-merged-sequences demux-joined.qza --o-unmerged-sequences demux-unjoined.qza 
+# visualize how many reads from fwd and rev could be joined...only keeping those that join 
+qiime demux summarize --i-data demux-joined.qza --o-visualization demux-joined.qzv
+# filtering based on quality scores to begin to deal with chimeric regions and incorrect base calls
+qiime quality-filter q-score --i-demux demux-joined.qza --o-filtered-sequences demux-joined-filtered.qza --o-filter-stats demux-joined-filter-stats.qza
+# running deblur for further de-noising 
+qiime deblur denoise-16S   --i-demultiplexed-seqs demux-joined-filtered.qza   --p-trim-length 250   --p-sample-stats   --o-representative-sequences rep-seqs.qza   --o-table table.qza   --o-stats deblur-stats.qza
+# tabulate sequences
+qiime feature-table summarize   --i-table table.qza   --o-visualization table.qzv
+# stats for what sequences passed all the denoising steps:
+qiime deblur visualize-stats   --i-deblur-stats deblur-stats.qza   --o-visualization deblur-stats.qzv
+# visualization
+qiime feature-table tabulate-seqs   --i-data rep-seqs.qza   --o-visualization rep-seqs.qzv
+# generate a tree
+qiime phylogeny align-to-tree-mafft-fasttree   --i-sequences rep-seqs.qza   --o-alignment aligned-rep-seqs.qza   --o-masked-alignment masked-aligned-rep-seqs.qza   --o-tree unrooted-tree.qza   --o-rooted-tree rooted-tree.qza
+```
+
+```{bash}
+# install greengenes2 if needed
+pip install q2-greengenes2
+# grab the reference database
+wget http://ftp.microbio.me/greengenes_release/2022.10/2022.10.backbone.full-length.fna.qza
+wget http://ftp.microbio.me/greengenes_release/2022.10/2022.10.backbone.tax.qza
+# extract reads from full length greengenes2 database '2022.10.backbone.full-length.fna.qza' using EMP primers (V4 region)
+qiime feature-classifier extract-reads --i-sequences 2022.10.backbone.full-length.fna.qza --p-f-primer GTGCCAGCMGCCGCGGTAA --p-r-primer GGACTACHVGGGTWTCTAAT --o-reads ref-seqs-ggkozich.qza
+# train naive-bayes classifier
+qiime feature-classifier fit-classifier-naive-bayes --i-reference-reads ref-seqs-ggkozich.qza --i-reference-taxonomy ./2022.10.backbone.tax.qza --o-classifier classifier-gg2kozich.qza
+# similarly this can take some RAM: using your trained classifier to assign taxonomy to your sample reads
+qiime feature-classifier classify-sklearn --i-classifier classifier-gg2kozich.qza --i-reads rep-seqs.qza --o-classification gg2-taxonomy.qza
+```
+
+```{bash}
+# make a directory to put in the stuff qiime2 generates that will be used in later analysis
+mkdir phyloseq
+# what will become the otu table, gets output as biom file which will be converted
+qiime tools export --input-path table.qza --output-path ./phyloseq/
+# convert biom to tsv
+biom convert -i phyloseq/feature-table.biom -o phyloseq/otu_table.tsv --to-tsv
+# export taxonomy to tsv
+qiime tools export --input-path gg2-taxonomy.qza --output-path phyloseq
+# export tree from above
+qiime tools export --input-path unrooted-tree.qza --output-path phyloseq
+# all tsvs will need to be converted to csvs and curated to match expected input coming up for phyloseq...this just entails some minor formatting such as deleting extra rows in the otu table  and the first column of the taxonomy and otu tables being "OTU" 
+# I also manually split the taxonomy levels in the taxonomy file and remove prefixes placed by the database
+```
+
+With .csvs in hand we move to R for the remainder of the analyses
+Here are all the libraries used:
+```{r}
+library(ape)
+library(magrittr)
+library(data.table)
+library(phytools)
+library(xfun)
+library(decontam)
+library(phyloseq)
+library(ggplot2)
+library(breakaway)
+library(DivNet)
+library(dplyr)
+library(cowplot)
+library(wesanderson)
+library(RColorBrewer)
+library(beanplot)
+library(vegan)
+library(ranacapa)
+# library(ggpubr)
+# library(facetscales)
+library(gridExtra)
+library(reshape)
+library(grid)
+library(viridis)
+library(pander)
+library(gplots)
+library(VennDiagram)
+library(ALDEx2)
+library(tidyverse)
+library(pander)
+library(data.table)
+library(purrr)
+library(naniar)
+library(microshades)
+library(ggh4x)
+```
+
+Tree prepping
+Re-rooting of phylogenetic tree carried out using procedure described at:
+https://github.com/joey711/phyloseq/issues/597
+```{r}
+library(phyloseq) # you will probably have to install this! This is our workhorse package for accessing our data
+library(phytools) # you will probably have to install this!
+pick_new_outgroup <- function(tree.unrooted){
+    require("magrittr")
+    require("data.table")
+    require("ape") # ape::Ntip
+    # tablify parts of tree that we need.
+    treeDT <-
+      cbind(
+        data.table(tree.unrooted$edge),
+        data.table(length = tree.unrooted$edge.length)
+      )[1:Ntip(tree.unrooted)] %>%
+      cbind(data.table(id = tree.unrooted$tip.label))
+    # Take the longest terminal branch as outgroup
+    new.outgroup <- treeDT[which.max(length)]$id
+    return(new.outgroup)
+}
+# read-in our newick formatted tree from qiime
+unrooted_qiime_default<-read.newick(file="[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/tree.nwk")
+new.outgroup = pick_new_outgroup(unrooted_qiime_default)
+rootedTree = ape::root(unrooted_qiime_default, outgroup=new.outgroup, resolve.root=TRUE)
+# this will be the phy_tree part of our phyloseq object
+phy_tree<-read_tree(rootedTree, errorIfNULL=FALSE)
+```
+
+Next we need the otu_table, tax_table, and sample_data parts of our phyloseq object (counts for ASVs per sample, taxonomic assignment, and metadata):
+```{r}
+otu_csv<-read.csv("[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/otu_table.csv")
+otu_rows_fixed <- data.frame(otu_csv, row.names = 1)
+OTU_16S<-otu_table(otu_rows_fixed,taxa_are_rows = TRUE)
+
+tax_csv<-read.csv("[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/taxonomy.csv")
+tax_rows_fixed<-data.frame(tax_csv, row.names = 1)
+tax_matrix<-as.matrix(tax_rows_fixed)
+TAX_16S<-tax_table(tax_matrix, errorIfNULL=TRUE)
+
+meta_csv<-read.csv("[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/16s_metadata.csv")
+meta_rows<-data.frame(meta_csv, row.names = 1)
+META_16S<-sample_data(meta_rows)
+```
+
+Save initial phyloseq!
+```{r}
+seq_object<-phyloseq(OTU_16S,TAX_16S,META_16S,phy_tree)
+saveRDS(seq_object,"[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/initial_phyloseq")
+seq_object<-readRDS("[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/initial_phyloseq")
+```
+
+Package `decontam` used for sample decontamination, see:
+https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-018-0605-2 see also:
+https://benjjneb.github.io/decontam/vignettes/decontam_intro.html
+
+Inspect library size
+```{r}
+df <- as.data.frame(sample_data(seq_object)) # Put sample_data into a ggplot-friendly data.frame
+df$LibrarySize <- sample_sums(seq_object)
+df <- df[order(df$LibrarySize),]
+df$Index <- seq(nrow(df))
+ggplot(data=df, aes(x=Index, y=LibrarySize, color=Sample_Control)) + geom_point()
+```
+
+Prevalence-based contaminant assignment 
+```{r}
+sample_data(seq_object)$is.neg <- sample_data(seq_object)$Sample_Control == "Control"
+
+#this threshold can be modified depending on desired sensitivity (see docs above)
+contamdf.prev05 <- isContaminant(seq_object, method="prevalence", neg="is.neg", threshold=0.5)
+table(contamdf.prev05$contaminant)
+
+ps.pa <- transform_sample_counts(seq_object, function(abund) 1*(abund>0))
+ps.pa.neg <- prune_samples(sample_data(ps.pa)$Sample_Control == "Control", ps.pa)
+ps.pa.pos <- prune_samples(sample_data(ps.pa)$Sample_Control == "True Sample", ps.pa)
+# Make data.frame of prevalence in positive and negative samples
+df.pa <- data.frame(pa.pos=taxa_sums(ps.pa.pos), pa.neg=taxa_sums(ps.pa.neg),
+                      contaminant=contamdf.prev05$contaminant)
+b<-ggplot(data=df.pa, aes(x=pa.neg, y=pa.pos, color=contaminant)) + geom_point() +
+  xlab("Prevalence  (Controls)") + ylab("Prevalence (True Samples)") +theme_cowplot() + theme(panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank())
+
+# take a look at how frequently those ASVs called as contaminants are seen in your real samples! good to remove them! 
+b
+
+# make a data frame of the contaminant reads
+prev<-contamdf.prev05[which(contamdf.prev05$contaminant=='TRUE'),]
+prev<-rownames_to_column(prev,var="ASV")
+ps.noncontam <- prune_taxa(!contamdf.prev05$contaminant, seq_object)
+```
+
+Frequency-based contaminant assignment
+```{r}
+contamdf.freq <- isContaminant(ps.noncontam, method="frequency", conc="Library_quant")
+head(contamdf.freq)
+table(contamdf.freq$contaminant)
+
+PITCHER_CONTAMINANT_freq<-contamdf.freq[which(contamdf.freq$contaminant=='TRUE'),]
+
+ps.noncontam <- prune_taxa(!contamdf.freq$contaminant, ps.noncontam)
+```
+
+Sanity check: how do putative contaminant reads look?
+```{r}
+# what proportion of reads do putative 'contaminants' comprise?
+# all contaminants pooled
+df_tax<-as.data.frame(tax_table(seq_object)) # extract taxonomy from your phyloseq object as a dataframe
+
+df_tax$contaminant_status <- "not contaminant" # label those called contaminant by prevalence
+df_tax$contaminant_status[rownames(df_tax) %in% duffy_prev$ASV] <- "contaminant"
+
+tax_matrix<-as.matrix(df_tax) # convert back to phyloseq style
+TAX_16S<-tax_table(tax_matrix, errorIfNULL=TRUE)
+
+phyloseq_for_contaminant_rel_abund_pooled<-phyloseq(sample_data(seq_object), otu_table(seq_object), TAX_16S, phy_tree(seq_object))
+
+ps.norm = transform_sample_counts(phyloseq_for_contaminant_rel_abund_pooled, function(x) x / sum(x) ) # convert raw counts to relative abundance
+melted<-psmelt(ps.norm) # melt you phyloseq object
+plot<-melted%>% # plot!
+    ggplot(aes(x=Sample, y=Abundance, fill=contaminant_status))+
+    geom_col() +
+     xlab("Sample")+ ylab("Proportion of Reads")+
+  facet_grid(.~Water_Larvae, scales = "free_x", space = "free") + 
+    theme_cowplot() + theme(text = element_text(size=15)) + scale_y_continuous(expand = c(0,0)) + theme(axis.text.x = element_text(angle= 90, size=15), axis.text.y = element_text(size=15)) + scale_fill_manual(values= c("grey50","#8cd752"))
+plot$labels$fill<-"Contaminant status"
+plot
+
+# each contaminant separately
+for (contaminant in duffy_prev$ASV) {
+  
+  temp<-melted %>% filter(OTU==contaminant)
+
+  temp_plot<- temp%>%
+    ggplot(aes(x=Sample, y=Abundance, fill=contaminant_status))+
+    geom_col() +
+     xlab("Sample")+ ylab("Proportion of Reads")+ ggtitle(contaminant)+
+  facet_grid(.~Water_Larvae, scales = "free_x", space = "free") + 
+    theme_cowplot() + theme(text = element_text(size=15)) + scale_y_continuous(expand = c(0,0)) + theme(axis.text.x = element_text(angle= 90, size=15), axis.text.y = element_text(size=12)) + scale_fill_manual(values= c("grey50","#8cd752"))
+temp_plot$labels$fill<-"Contaminant status"
+print(temp_plot)
+}
+```
+
+Save new object and modify taxonomy so unclassified ASVs are reported to most resolved taxonomic level available
+```{r}
+saveRDS(ps.noncontam,"[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/final LP phyloseq")
+seq_object = readRDS("[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/final LP phyloseq")
+
+library(tidyverse)
+tax <- data.frame(tax_table(seq_object))
+for (i in 1:7){ tax[,i] <- as.character(tax[,i])}
+####### Fills holes in the tax table
+tax[is.na(tax)] <- ""
+for (i in 1:nrow(tax)){
+  if (tax[i,2] == ""){
+kingdom <- paste("Kingdom_", tax[i,1], sep = "")
+tax[i, 2:7] <- kingdom
+} else if (tax[i,3] == ""){
+phylum <- paste("Phylum_", tax[i,2], sep = "")
+tax[i, 3:7] <- phylum
+} else if (tax[i,4] == ""){
+class <- paste("Class_", tax[i,3], sep = "")
+tax[i, 4:7] <- class
+} else if (tax[i,5] == ""){
+order <- paste("Order_", tax[i,4], sep = "")
+tax[i, 5:7] <- order
+} else if (tax[i,6] == ""){
+family <- paste("Family_", tax[i,5], sep = "")
+tax[i, 6:7] <- family
+} else if (tax[i,7] == ""){
+tax$Species[i] <- paste("Genus",tax$Genus[i], sep = "_")
+}
+}
+# replace tax_table with this nicer one
+tax_table(seq_object) <- as.matrix(tax)
+
+
+greater_than_100_ASVs <- prune_samples(sample_sums(seq_object)>=100, seq_object)
+no_controls<-prune_samples(sample_data(greater_than_100_ASVs)$Sample_Control == "True Sample", greater_than_100_ASVs)
+no_controls<-subset_taxa(no_controls, Class!="Chloroplast")
+no_controls<-subset_taxa(no_controls, Family!="Mitochondria")
+seq_object<-prune_samples(sample_data(no_controls)$Treatment != "CONTROL", no_controls)
+
+saveRDS(seq_object,"[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/final LP phyloseq")
+seq_object = readRDS("[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/final LP phyloseq")
+```
+
+What are the dominant taxa present in the dataset?
+```{r}
+phylum_glom<-tax_glom(seq_object, taxrank="Phylum", NArm=TRUE, bad_empty=c(NA, "", " ", "\t"))
+phylum_glom_df<-as.data.frame(as.matrix(tax_table(phylum_glom)))
+
+# make a list of all the phyla to loop through
+list<-as.list(unique(phylum_glom_df$Phylum))
+
+df<-data.frame(0,0,0)
+colnames(df)<-c("Phylum","Unique ASVs","Total Reads")
+count<-1
+
+for (taxon in list) {
+  temp_phy_object<- subset_taxa(seq_object, Phylum== taxon)
+  unique_ASVs<- nrow(as.data.frame(as.matrix(tax_table(temp_phy_object))))
+  sum<-sum(sample_sums(temp_phy_object))
+ 
+  df[count,1]<-taxon
+  df[count,2]<- unique_ASVs
+  df[count,3]<- sum
+  
+  count<- count+1
+}
+df_ordered<- df[order(-df$`Total Reads`),]
+# this dataframe should let you know how many ASVs are associated with each phyla in your dataset and give you an idea of how many reads got assigned to each of these groups
+df_ordered$relative_read_abundance<-df_ordered$`Total Reads`/sum(df_ordered$`Total Reads`)
+df_ordered
+```
+
+Initial taxonomic visualization using microshades:
+```{r}
+seq_object<-prune_samples(sample_data(seq_object)$Treatment !="stock", seq_object)
+sample_data(seq_object)$new_type<-sample_data(seq_object)$Treatment
+
+temp_phyloseq_df<-as.data.frame(as.matrix(sample_data(seq_object)))
+
+temp_phyloseq_df<-temp_phyloseq_df %>%
+     mutate(new_type = dplyr::recode(new_type,`L0`= "Uncolonized",
+         `L2` = "Field colonization",
+         `L10` = "High colonization"))
+
+temp_phyloseq_df<-temp_phyloseq_df %>%
+     mutate(Timepoint = dplyr::recode(Timepoint, 
+      `48hr` = "48-hr",
+      `12Day` = "12-day"))
+
+meta_16s<-sample_data(temp_phyloseq_df)
+
+temp<-phyloseq(otu_table(seq_object), meta_16s,tax_table(seq_object))
+
+sample_data(temp)$new_type<-factor(sample_data(temp)$new_type, levels=c("Uncolonized", "Field colonization","High colonization"))
+sample_data(temp)$Water_Larvae<-factor(sample_data(temp)$Water_Larvae, levels=c("water","larvae"))
+sample_data(temp)$Timepoint<-factor(sample_data(temp)$Timepoint, levels=c("48-hr","12-day"))
+
+mdf_prep <- prep_mdf(temp, remove_na = TRUE)
+color_obj <- microshades::create_color_dfs(mdf_prep, group_level= "Phylum", subgroup_level= "Genus", selected_groups = c(" Proteobacteria", " Actinobacteriota", " Bacteroidota", " Firmicutes_A"))
+
+mdf <- color_obj$mdf
+cdf <- color_obj$cdf
+
+plot <- microshades::plot_microshades(mdf, cdf)
+legend <-custom_legend(mdf, cdf, subgroup_level = "Genus")
+
+plot_diff<-plot + scale_y_continuous(labels = scales::percent, expand = expansion(0)) +
+  theme(legend.position = "none")  +
+  facet_nested(~new_type+Water_Larvae+Timepoint, scales = "free_x", space="free_x",nest_line = element_line(colour = "black")) +
+  theme(axis.text.x = element_blank()) + 
+  theme(plot.margin = margin(6,20,6,6)) + xlab("Sample") +
+  theme(ggh4x.facet.nestline = element_line(linetype = 3))
+
+larval_pass<-plot_grid(plot_diff, legend,  rel_widths = c(1, .25))
+larval_pass
+```
+
+Visual determination of saturation - all saturate in this case
+```{r}
+rarefaction<-ranacapa::ggrare(seq_object, step = 1000, color = "Water_Larvae", se = FALSE, plot = FALSE)
+r<-rarefaction + facet_wrap(~Timepoint) +  geom_line(size=1) + coord_cartesian(xlim =c(0, 5000), ylim = c(0, 75)) + theme_cowplot() + theme(panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank())
+r
+```
+
+Generate summary diversity data
+```{r}
+a<-plot_richness(seq_object, x = "samples", measures="Observed")
+summary<-a$data
+ observed<-summary[,c(4,6,9,22:25,26)]
+Total_Reads<-sample_sums(seq_object)
+
+median(Total_Reads)
+sum(Total_Reads)
+
+f<-as.data.frame(Total_Reads)
+f<-as.data.frame(f)
+colnames(f)="Total_Reads"
+total.reads <- tibble::rownames_to_column(f, "samples")
+
+total_reads_obs<-merge(observed,total.reads)
+
+rich<-breakaway(seq_object)
+
+rich_values<-rich %>% summary %$% estimate
+rich_error<-rich %>% summary %$% error
+
+f<-as.data.frame(rich_values)
+f<-as.data.frame(f)
+colnames(f)="Breakaway Estimate of Richness"
+rich_final <- tibble::rownames_to_column(f, "samples")
+
+f<-as.data.frame(rich_error)
+f<-as.data.frame(f)
+colnames(f)="Breakaway Error"
+rich_error <- tibble::rownames_to_column(f, "samples")
+
+merged_rich<-merge(rich_final,rich_error)
+
+pick_base(t(otu_table(seq_object)), automatic_cutoff = TRUE)
+# b4587918bfe7955deb4fe9932ec07c3d
+shannon<-divnet(seq_object, base= "b4587918bfe7955deb4fe9932ec07c3d")
+
+shannon_estimates <- shannon$shannon %>% summary %$% estimate
+shannon_ses <- sqrt(shannon$`shannon-variance`)
+
+f<-as.data.frame(shannon_estimates)
+f<-as.data.frame(f)
+colnames(f)="Shannon Sample-Wise"
+shannon_final<- tibble::rownames_to_column(f, "samples")
+S
+f<-as.data.frame(shannon_ses)
+f<-as.data.frame(f)
+colnames(f)="Shannon Error"
+shannon_error <- tibble::rownames_to_column(f, "samples")
+
+merged_shannon<-merge(shannon_final,shannon_error)
+
+merge_1<-merge(total_reads_obs,merged_rich)
+
+merge_2<-merge(merge_1,merged_shannon)
+ # write.csv(merge_2,"df_hypothesis_tests_larval_passaging_diversity.csv")
+
+## tangent to make sample detail for larval passaging supplementary table 3
+supp_table_3<-merge_2[,-c(6:7)]
+colnames(supp_table_3)[1]<-"Sample ID"
+colnames(supp_table_3)[2]<-"Water or Larvae"
+colnames(supp_table_3)[5]<-"Pre-pooling DNA (ng/uL)"
+colnames(supp_table_3)[6]<-"Observed ASVs"
+colnames(supp_table_3)[7]<-"Total Reads"
+
+# write.csv(supp_table_3,"Supplementary Table 3.csv")
+```
+
+Diversity hypothesis testing using `betta`
+```{r}
+div_df<-read.csv("./df_hypothesis_tests_larval_passaging_diversity.csv")
+# does div differ from 48 hr to 12 day timepoint generally?
+df_water_div<-div_df[div_df$Water_Larvae=="water",]
+# shannon
+a <- betta(formula = Shannon.Sample.Wise ~ Timepoint, 
+                      ses = Shannon.Error, data = df_water_div)
+a$table
+# richness
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ Timepoint, 
+                      ses = Breakaway.Error, data = df_water_div)
+b$table
+# within each treatment group
+# just_L0
+just_L0 <-df_water_div[df_water_div$Treatment=="L0",]
+a <- betta(formula = Shannon.Sample.Wise ~ Timepoint, 
+                      ses = Shannon.Error, data = just_L0)
+a$table
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ Timepoint, 
+                      ses = Breakaway.Error, data = just_L0)
+b$table
+#just_L2
+just_L2 <-df_water_div[df_water_div$Treatment=="L2",]
+a <- betta(formula = Shannon.Sample.Wise ~ Timepoint, 
+                      ses = Shannon.Error, data = just_L2)
+a$table
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ Timepoint, 
+                      ses = Breakaway.Error, data = just_L2)
+b$table
+#just_L10
+just_L10 <-df_water_div[df_water_div$Treatment=="L10",]
+a <- betta(formula = Shannon.Sample.Wise ~ Timepoint, 
+                      ses = Shannon.Error, data = just_L10)
+a$table
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ Timepoint, 
+                      ses = Breakaway.Error, data = just_L10)
+b$table
+
+########
+
+# does diversity differ at 48 hours between groups
+just48<-df_water_div[df_water_div$Timepoint=="48hr",]
+# shannon
+a <- betta(formula = Shannon.Sample.Wise ~ Treatment, 
+                      ses = Shannon.Error, data = just48)
+a$table
+
+just48$Treatment_relevel<-factor(just48$Treatment,levels = c("L2","L0","L10"))
+a <- betta(formula = Shannon.Sample.Wise ~ Treatment_relevel, 
+                      ses = Shannon.Error, data = just48)
+a$table
+
+# richness
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ Treatment, 
+                      ses = Breakaway.Error, data = just48)
+b$table
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ Treatment_relevel, 
+                      ses = Breakaway.Error, data = just48)
+b$table
+
+##### does diversity differ at 12 days between groups
+
+just12<-df_water_div[df_water_div$Timepoint=="12Day",]
+
+# shannon
+a <- betta(formula = Shannon.Sample.Wise ~ Treatment, 
+                      ses = Shannon.Error, data = just12)
+a$table
+
+just12$Treatment_relevel<-factor(just12$Treatment,levels = c("L2","L0","L10"))
+a <- betta(formula = Shannon.Sample.Wise ~ Treatment_relevel, 
+                      ses = Shannon.Error, data = just12)
+a$table
+# richness
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ Treatment, 
+                      ses = Breakaway.Error, data = just12)
+b$table
+
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ Treatment_relevel, 
+                      ses = Breakaway.Error, data = just12)
+b$table
+
+#### larval diversity 
+df_larval_div<-div_df[div_df$Water_Larvae=="larvae",]
+# shannon
+a <- betta(formula = Shannon.Sample.Wise ~ Treatment, 
+                      ses = Shannon.Error, data = df_larval_div)
+a$table
+# richness
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ Treatment, 
+                      ses = Breakaway.Error, data = df_larval_div)
+b$table
+
+#### larva vs water 
+# start water
+df_larval_v_water_early_div<-div_df[div_df$Water_Larvae=="larvae"|div_df$Timepoint=="48hr",]
+
+a <- betta(formula = Shannon.Sample.Wise ~ Water_Larvae, 
+                      ses = Shannon.Error, data = df_larval_v_water_early_div)
+a$table
+# richness
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ Water_Larvae, 
+                      ses = Breakaway.Error, data = df_larval_v_water_early_div)
+b$table
+
+# start L2
+df_larval_v_water_early_L2_div <- df_larval_v_water_early_div[df_larval_v_water_early_div$Treatment=="L2",]
+a <- betta(formula = Shannon.Sample.Wise ~ Water_Larvae, 
+                      ses = Shannon.Error, data = df_larval_v_water_early_L2_div)
+a$table
+# richness
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ Water_Larvae, 
+                      ses = Breakaway.Error, data = df_larval_v_water_early_L2_div)
+b$table
+
+# start L10
+df_larval_v_water_early_L10_div <- df_larval_v_water_early_div[df_larval_v_water_early_div$Treatment=="L10",]
+a <- betta(formula = Shannon.Sample.Wise ~ Water_Larvae, 
+                      ses = Shannon.Error, data = df_larval_v_water_early_L10_div)
+a$table
+# richness
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ Water_Larvae, 
+                      ses = Breakaway.Error, data = df_larval_v_water_early_L10_div)
+b$table
+
+# harvest water
+df_larval_v_water_harvest_div<-div_df[div_df$Water_Larvae=="larvae"|div_df$Timepoint=="12Day",]
+df_larval_v_water_harvest_div$type_relevel<-factor(df_larval_v_water_harvest_div$Water_Larvae,levels = c("water","larvae"))
+a <- betta(formula = Shannon.Sample.Wise ~ type_relevel, 
+                      ses = Shannon.Error, data = df_larval_v_water_harvest_div)
+a$table
+# richness
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ type_relevel, 
+                      ses = Breakaway.Error, data = df_larval_v_water_harvest_div)
+b$table
+
+# harvest L2
+
+df_larval_v_water_harvest_L2_div <- df_larval_v_water_harvest_div[df_larval_v_water_harvest_div$Treatment=="L2",]
+a <- betta(formula = Shannon.Sample.Wise ~ type_relevel, 
+                      ses = Shannon.Error, data = df_larval_v_water_harvest_L2_div)
+a$table
+# richness
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ type_relevel, 
+                      ses = Breakaway.Error, data = df_larval_v_water_harvest_L2_div)
+b$table
+
+# harvest l10
+df_larval_v_water_harvest_L10_div <- df_larval_v_water_harvest_div[df_larval_v_water_harvest_div$Treatment=="L10",]
+a <- betta(formula = Shannon.Sample.Wise ~ type_relevel, 
+                      ses = Shannon.Error, data = df_larval_v_water_harvest_L10_div)
+a$table
+# richness
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ type_relevel, 
+                      ses = Breakaway.Error, data = df_larval_v_water_harvest_L10_div)
+b$table
+
+```
+
+Differential abundance testing
+12-day water field vs high
+```{r}
+seq_object<-prune_samples(sample_data(seq_object)$Treatment !="stock", seq_object)
+sample_data(seq_object)$new_type<-sample_data(seq_object)$Treatment
+
+temp_phyloseq_df<-as.data.frame(as.matrix(sample_data(seq_object)))
+
+temp_phyloseq_df<-temp_phyloseq_df %>%
+     mutate(new_type = dplyr::recode(new_type,`L0`= "Uncolonized",
+         `L2` = "Field colonization",
+         `L10` = "High colonization"))
+
+temp_phyloseq_df<-temp_phyloseq_df %>%
+     mutate(Timepoint = dplyr::recode(Timepoint,
+      `48hr` = "48-hr",
+      `12Day` = "12-day"))
+
+meta_16s<-sample_data(temp_phyloseq_df)
+
+temp<-phyloseq(otu_table(seq_object), meta_16s,tax_table(seq_object))
+
+sample_data(temp)$new_type<-factor(sample_data(temp)$new_type, levels=c("Uncolonized", "Field colonization","High colonization"))
+sample_data(temp)$Water_Larvae<-factor(sample_data(temp)$Water_Larvae, levels=c("water","larvae"))
+sample_data(temp)$Timepoint<-factor(sample_data(temp)$Timepoint, levels=c("48-hr","12-day"))
+
+temp<-prune_samples(sample_data(temp)$new_type !="Uncolonized" & sample_data(temp)$Timepoint !="48-hr" & sample_data(temp)$Water_Larvae !="larvae", temp)
+temp<-prune_taxa(taxa_sums(temp) > 0, temp)
+
+sample_data(temp)$new_type<-as.character(sample_data(temp)$new_type)
+
+library(ALDEx2)
+
+aldex_physeq_field_vs_high_set<-aldex.clr(as.data.frame(otu_table(temp)),
+                             sample_data(temp)$new_type,
+                             mc.samples=128,
+                             denom="all",
+                             verbose=TRUE,
+                             useMC=FALSE)
+
+aldex_physeq_field_vs_high.t.test<-aldex.ttest(aldex_physeq_field_vs_high_set, paired.test = FALSE, hist.plot = FALSE, verbose = FALSE)
+aldex_physeq_field_vs_high.t.test.effect <- aldex.effect(aldex_physeq_field_vs_high_set, CI=T, verbose=FALSE)
+
+aldex_df_field_vs_high <- data.frame(aldex_physeq_field_vs_high.t.test,aldex_physeq_field_vs_high.t.test.effect)
+
+par(mfrow=c(1,2))
+aldex.plot(aldex_df_field_vs_high, type="MA", test="welch")
+aldex.plot(aldex_df_field_vs_high, type="MW", test="welch")
+
+aldex_df_field_vs_high$one_or_two<-"none"
+aldex_df_field_vs_high$one_or_two[which(aldex_df_field_vs_high$we.eBH < 0.05 | aldex_df_field_vs_high$wi.eBH < 0.05)] <-"one"
+aldex_df_field_vs_high$one_or_two[which(aldex_df_field_vs_high$we.eBH < 0.05 & aldex_df_field_vs_high$wi.eBH < 0.05)] <-"both"
+
+taxa_info <- data.frame(tax_table(temp))
+taxa_info <- taxa_info %>% rownames_to_column(var = "ASV")
+
+aldex_df_field_vs_high<-aldex_df_field_vs_high %>% rownames_to_column(var = "ASV")
+
+aldex_df_field_vs_high <- left_join(aldex_df_field_vs_high, taxa_info)
+# start making make supp table 6
+aldex_df_field_vs_high$comparison<-"Rearing Water Field vs High Day 12"
+supp_file_6<-aldex_df_field_vs_high %>% filter(one_or_two == "both")
+
+####### example code for generating dispersion plot 
+
+# aldex_df_field_vs_high needs to be exported and edited in excel to manually specify colors and point size
+# aldex_df_field_vs_high<-read.csv('C:/Users/aldoa/OneDrive/Desktop/temp_for_dispersion_plot_lp_exp_field_vs_high.csv')
+# 
+# aldex_df_field_vs_high<-aldex_df_field_vs_high %>%
+#      mutate(color = dplyr::recode(color, `non_sig_color` = "grey50",
+#          `pro_color` = "#5ba760", 
+#          `actino_color` = "#f09938",
+#          `bac_color` = "#5991c3",
+#          `firm_color` = "#9593c1"))
+# library(ggrepel)
+# 
+# a<-ggplot(aldex_df_field_vs_high, aes(x=diff.win,y=diff.btw)) +
+#   xlab("Dispersion")+ ylab("Difference")+
+#   geom_text_repel(aes(label = pointlabel), max.overlaps = 10000) +
+# geom_point(aes(size= size, color= color))+
+#   scale_color_identity()+
+#   scale_size_identity()+
+#   theme_cowplot() +  theme(
+#   text=element_text(size=18),
+#   legend.title = element_text(size=18),
+#   legend.text = element_text(size=18),
+#   legend.margin = margin(6, 6, 6, 6),legend.box.background = element_rect(color="grey70",size=0.1),
+#   panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  guides(size = "none") + geom_abline(slope=1, intercept=0, linetype="dashed") + geom_abline(slope=-1, intercept=0, linetype="dashed")
+# # object a is then exported and edited for colors and label dodging in inkskape
+```
+12-day zero vs high -  - note need to flip axis order for table
+```{r}
+temp<-phyloseq(otu_table(seq_object), meta_16s,tax_table(seq_object))
+
+sample_data(temp)$new_type<-factor(sample_data(temp)$new_type, levels=c("Uncolonized", "Field colonization","High colonization"))
+sample_data(temp)$Water_Larvae<-factor(sample_data(temp)$Water_Larvae, levels=c("water","larvae"))
+sample_data(temp)$Timepoint<-factor(sample_data(temp)$Timepoint, levels=c("48-hr","12-day"))
+
+temp<-prune_samples(sample_data(temp)$new_type !="Field colonization" & sample_data(temp)$Timepoint !="48-hr" & sample_data(temp)$Water_Larvae !="larvae", temp)
+sample_data(temp)$new_type<-factor(sample_data(temp)$new_type, levels=c("Uncolonized","High colonization"))
+temp<-prune_taxa(taxa_sums(temp) > 0, temp)
+
+sample_data(temp)$new_type<-as.character(sample_data(temp)$new_type)
+
+library(ALDEx2)
+
+aldex_physeq_zero_vs_high_set<-aldex.clr(as.data.frame(otu_table(temp)),
+                             sample_data(temp)$new_type,
+                             mc.samples=128,
+                             denom="all",
+                             verbose=TRUE,
+                             useMC=FALSE)
+
+aldex_physeq_zero_vs_high.t.test<-aldex.ttest(aldex_physeq_zero_vs_high_set, paired.test = FALSE, hist.plot = FALSE, verbose = FALSE)
+aldex_physeq_zero_vs_high.t.test.effect <- aldex.effect(aldex_physeq_zero_vs_high_set, CI=T, verbose=FALSE)
+
+aldex_df_zero_vs_high <- data.frame(aldex_physeq_zero_vs_high.t.test,aldex_physeq_zero_vs_high.t.test.effect)
+
+par(mfrow=c(1,2))
+aldex.plot(aldex_df_zero_vs_high, type="MA", test="welch")
+aldex.plot(aldex_df_zero_vs_high, type="MW", test="welch")
+
+aldex_df_zero_vs_high$one_or_two<-"none"
+aldex_df_zero_vs_high$one_or_two[which(aldex_df_zero_vs_high$we.eBH < 0.05 | aldex_df_zero_vs_high$wi.eBH < 0.05)] <-"one"
+aldex_df_zero_vs_high$one_or_two[which(aldex_df_zero_vs_high$we.eBH < 0.05 & aldex_df_zero_vs_high$wi.eBH < 0.05)] <-"both"
+
+taxa_info <- data.frame(tax_table(temp))
+taxa_info <- taxa_info %>% rownames_to_column(var = "ASV")
+
+aldex_df_zero_vs_high<-aldex_df_zero_vs_high %>% rownames_to_column(var = "ASV")
+
+aldex_df_zero_vs_high <- left_join(aldex_df_zero_vs_high, taxa_info)
+# start making make supp table 6
+aldex_df_zero_vs_high$comparison<-"Rearing Water Zero vs High Day 12"
+
+supp_file_6_merge<-aldex_df_zero_vs_high %>% filter(one_or_two == "both")
+supp_file_6<-merge(supp_file_6_merge,supp_file_6,all=TRUE)
+```
+Larvae day 12
+```{r}
+temp<-phyloseq(otu_table(seq_object), meta_16s,tax_table(seq_object))
+
+sample_data(temp)$new_type<-factor(sample_data(temp)$new_type, levels=c("Uncolonized", "Field colonization","High colonization"))
+sample_data(temp)$Water_Larvae<-factor(sample_data(temp)$Water_Larvae, levels=c("water","larvae"))
+sample_data(temp)$Timepoint<-factor(sample_data(temp)$Timepoint, levels=c("48-hr","12-day"))
+
+temp<-prune_samples(sample_data(temp)$Water_Larvae =="larvae", temp)
+temp<-prune_taxa(taxa_sums(temp) > 0, temp)
+
+sample_data(temp)$new_type<-as.character(sample_data(temp)$new_type)
+
+library(ALDEx2)
+
+aldex_physeq_field_vs_high_larvae_set<-aldex.clr(as.data.frame(otu_table(temp)),
+                             sample_data(temp)$new_type,
+                             mc.samples=128,
+                             denom="all",
+                             verbose=TRUE,
+                             useMC=FALSE)
+
+aldex_physeq_field_vs_high_larvae_set.t.test<-aldex.ttest(aldex_physeq_field_vs_high_larvae_set, paired.test = FALSE, hist.plot = FALSE, verbose = FALSE)
+aldex_physeq_field_vs_high_larvae_set.t.test.effect <- aldex.effect(aldex_physeq_field_vs_high_larvae_set, CI=T, verbose=FALSE)
+
+field_vs_high_larvae <- data.frame(aldex_physeq_field_vs_high_larvae_set.t.test,aldex_physeq_field_vs_high_larvae_set.t.test.effect)
+
+par(mfrow=c(1,2))
+aldex.plot(field_vs_high_larvae, type="MA", test="welch")
+aldex.plot(field_vs_high_larvae, type="MW", test="welch")
+
+field_vs_high_larvae$one_or_two<-"none"
+field_vs_high_larvae$one_or_two[which(field_vs_high_larvae$we.eBH < 0.05 | field_vs_high_larvae$wi.eBH < 0.05)] <-"one"
+field_vs_high_larvae$one_or_two[which(field_vs_high_larvae$we.eBH < 0.05 & field_vs_high_larvae$wi.eBH < 0.05)] <-"both"
+
+taxa_info <- data.frame(tax_table(temp))
+taxa_info <- taxa_info %>% rownames_to_column(var = "ASV")
+
+field_vs_high_larvae<-field_vs_high_larvae %>% rownames_to_column(var = "ASV")
+
+field_vs_high_larvae <- left_join(field_vs_high_larvae, taxa_info)
+# start making make supp table 6
+field_vs_high_larvae$comparison<-"Larvae Zero vs High Day 12"
+
+supp_file_6_merge<-field_vs_high_larvae %>% filter(one_or_two == "both")
+supp_file_6<-merge(supp_file_6_merge,supp_file_6,all=TRUE)
+
+```
+water over time (pooled) - note need to flip axis order for table
+```{r}
+temp<-phyloseq(otu_table(seq_object), meta_16s,tax_table(seq_object))
+
+sample_data(temp)$new_type<-factor(sample_data(temp)$new_type, levels=c("Uncolonized", "Field colonization","High colonization"))
+sample_data(temp)$Water_Larvae<-factor(sample_data(temp)$Water_Larvae, levels=c("water","larvae"))
+sample_data(temp)$Timepoint<-factor(sample_data(temp)$Timepoint, levels=c("48-hr","12-day"))
+
+temp<-prune_samples(sample_data(temp)$Water_Larvae =="water", temp)
+temp<-prune_taxa(taxa_sums(temp) > 0, temp)
+
+sample_data(temp)$Timepoint<-as.character(sample_data(temp)$Timepoint)
+
+library(ALDEx2)
+
+temporal_water_set<-aldex.clr(as.data.frame(otu_table(temp)),
+                             sample_data(temp)$Timepoint,
+                             mc.samples=128,
+                             denom="all",
+                             verbose=TRUE,
+                             useMC=FALSE)
+
+temporal_water_set.t.test<-aldex.ttest(temporal_water_set, paired.test = FALSE, hist.plot = FALSE, verbose = FALSE)
+temporal_water_set.t.test.effect <- aldex.effect(temporal_water_set, CI=T, verbose=FALSE)
+
+time_water <- data.frame(temporal_water_set.t.test,temporal_water_set.t.test.effect)
+
+par(mfrow=c(1,2))
+aldex.plot(time_water, type="MA", test="welch")
+aldex.plot(time_water, type="MW", test="welch")
+
+time_water$one_or_two<-"none"
+time_water$one_or_two[which(time_water$we.eBH < 0.05 | time_water$wi.eBH < 0.05)] <-"one"
+time_water$one_or_two[which(time_water$we.eBH < 0.05 & time_water$wi.eBH < 0.05)] <-"both"
+
+taxa_info <- data.frame(tax_table(temp))
+taxa_info <- taxa_info %>% rownames_to_column(var = "ASV")
+
+time_water<-time_water %>% rownames_to_column(var = "ASV")
+
+time_water <- left_join(time_water, taxa_info)
+# start making make supp table 6
+time_water$comparison<-"Rearing Water 48-hr vs 12-Day"
+supp_file_6_merge<-time_water %>% filter(one_or_two == "both")
+supp_file_6<-merge(supp_file_6_merge,supp_file_6,all=TRUE)
+# write.csv(supp_file_6,"Supplmentary Table 6.csv")
+# changed in excel for organization by comparison and summarization using pivot tables
+```
+
+Change relative to stock
+```{r}
+transformed_seq_object<-microbiome::transform(seq_object, "clr") 
+clr_dist_matrix <- phyloseq::distance(transformed_seq_object, method = "euclidean") 
+
+mat<-as.matrix(clr_dist_matrix)
+
+df<-as.data.frame(mat)
+
+beta<-data.frame(
+  "Samples" = rownames(df),
+  "Beta Stock"= df$LP209
+)
+
+df<-as.data.frame(as.matrix(sample_data(transformed_seq_object)))
+
+b <- tibble::rownames_to_column(df, "Samples")
+
+beta_merge<-merge(beta,b)
+
+beta_merge<-beta_merge[beta_merge$Samples!="LP209",]
+
+beta_merge$paste<-paste(beta_merge$Timepoint,beta_merge$Treatment,beta_merge$Water_Larvae)
+
+# boxplot((beta_fixed$Beta.Stock)~beta_fixed$Sample.Description)
+
+beta_merge$paste<-factor(beta_merge$paste,levels=c("48hr L0 water","48hr L2 water","48hr L10 water","12Day L0 water","12Day L2 water","12Day L10 water","12Day L2 larvae","12Day L10 larvae"))
+
+beta_merge$Timepoint<-factor(beta_merge$Timepoint,levels=c("48hr","12Day"))
+
+facet_names <- c(
+                    `48hr` = "48-hr",
+                    `12Day` = "12-day"
+                    )
+
+x<-ggplot(beta_merge, aes(x= paste, y= Beta.Stock)) + geom_boxplot(lwd=1.5, fatten = 1, outlier.size=4, fill= "white") + 
+  # scale_y_continuous(limits = c(30, 60))+
+  theme_cowplot()+
+  theme(legend.position = "none",
+  axis.line = element_line(colour = 'black', size = 2), axis.text.y = element_text(size = 20),axis.text.x = element_text(size = 20, angle = 45, hjust = 1),
+  axis.ticks.x=element_blank(), axis.title.y = element_text(size = 20), panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank(),
+  
+  strip.text.x = element_text(size = 20))+
+  
+        xlab("") + ylab(expression(beta*"-Diversity Relative to Starting Community (a.u.)")) +
+  # scale_fill_manual(values = saturation(demo_colors, 0.5)) +
+    facet_grid(~Timepoint,scale="free", space = "free", labeller = as_labeller(facet_names)) +
+  scale_x_discrete(labels = c("Uncolonized \nwater","Field colonization \nwater","High colonization \nwater","Field colonization \nlarvae","High colonization \nlarvae"))
+
+# ggsave("beta larval passaging.pdf",plot=x, path = "./",device="pdf",dpi=320, height=9,width=9)
+
+
+qqnorm( residuals(aov(Beta.Stock ~ paste, data= beta_merge)),pch=1,frame=FALSE)
+qqline( residuals(aov(Beta.Stock ~ paste, data= beta_merge)),lwd=1)
+plot(fitted(aov(Beta.Stock ~ paste, data= beta_merge)),
+  residuals(aov(Beta.Stock ~ paste, data= beta_merge)),xlab="fitted", 
+  ylab= "raw residual",main= "Beta Diversity by Sample Type")
+  abline(h=0, lty=2)
+  plot(histogram(beta_merge$Beta.Stock, xlab = "Beta Diversity Relative to Stock"))
+  
+  
+  library(car)
+  
+leveneTest(Beta.Stock~paste, data = beta_merge)
+
+model=lm( beta_merge$Beta.Stock ~ beta_merge$paste ) # run ANOVA (global test)
+ANOVA=aov(model)
+summary(model)
+
+TUKEY <- TukeyHSD(x=ANOVA, 'beta_merge$paste', conf.level=0.95) # run pairwise tests
+
+#  script to generate significance levels from:
+#  https://www.r-graph-gallery.com/84-tukey-test.html
+
+library(multcompView)
+
+ generate_label_df <- function(TUKEY, variable){
+
+ #      Extract labels and factor levels from Tukey post-hoc
+      Tukey.levels <- TUKEY[[variable]][,4]
+      Tukey.labels <- data.frame(multcompLetters(Tukey.levels)['Letters'])
+
+#      I need to put the labels in the same order as in the boxplot :
+      Tukey.labels$treatment=rownames(Tukey.labels)
+      Tukey.labels=Tukey.labels[order(Tukey.labels$treatment) , ]
+      return(Tukey.labels)
+      }
+
+  #Apply the function on my dataset
+ LABELS <- generate_label_df(TUKEY , "beta_merge$paste")
+
+LABELS 
+x
+
+df_water_cfu<-df %>% filter(Water_Larvae=="water")
+df_water_cfu$Density.CFU.mL.<-as.numeric(df_water_cfu$Density.CFU.mL.)
+
+
+plot_new<-ggplot(df_water_cfu,aes(x= Treatment  , y=log10(Density.CFU.mL.), fill= Treatment)) + geom_boxplot(lwd=1.25, fatten = 1, alpha=1) +
+    # geom_point(position= position_jitterdodge(jitter.width = 0.3,jitter.height = 0,dodge.width = 0.75, seed = NA),shape = 21, alpha = 0.4, size = 8) +
+    theme_cowplot()+
+   theme(
+     legend.position = 0,
+  text=element_text(size=16),
+  axis.text.x=element_text(angle=90, hjust=1),
+  axis.text= element_text(size=16),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  xlab("Mosquito Background") + ylab("log(CFU/mL)")
+
+
+qqnorm( residuals(aov(log10(Density.CFU.mL.) ~ Treatment, data= df_water_cfu)),pch=1,frame=FALSE)
+qqline( residuals(aov(log10(Density.CFU.mL.) ~ Treatment, data= df_water_cfu)),lwd=1)
+plot(fitted(aov(log10(Density.CFU.mL.) ~ Treatment, data= df_water_cfu)),
+  residuals(aov(log10(Density.CFU.mL.) ~ Treatment, data= df_water_cfu)),xlab="fitted", 
+  ylab= "raw residual",main= "Density by Sample Type")
+  abline(h=0, lty=2)
+  plot(hist(log10(df_water_cfu$Density.CFU.mL.), xlab = "CFU Density"))
+
+library(car)
+leveneTest(log~Treatment, data = new)
+
+model=lm( log10(Density.CFU.mL.) ~ Treatment, data= df_water_cfu) # run ANOVA (global test)
+ANOVA=aov(model)
+
+TUKEY <- TukeyHSD(x=ANOVA, 'Treatment', conf.level=0.95) # run pairwise tests
+
+#  script to generate significance levels from:
+#  https://www.r-graph-gallery.com/84-tukey-test.html
+
+library(multcompView)
+
+ generate_label_df <- function(TUKEY, variable){
+
+ #      Extract labels and factor levels from Tukey post-hoc
+      Tukey.levels <- TUKEY[[variable]][,4]
+      Tukey.labels <- data.frame(multcompLetters(Tukey.levels)['Letters'])
+
+#      I need to put the labels in the same order as in the boxplot :
+      Tukey.labels$treatment=rownames(Tukey.labels)
+      Tukey.labels=Tukey.labels[order(Tukey.labels$treatment) , ]
+      return(Tukey.labels)
+      }
+
+  #Apply the function on my dataset
+ LABELS <- generate_label_df(TUKEY , "Treatment")
+
+LABELS 
+
+```
+
+
+Testing difference between colonized and uncolonized pitchers surveyed in the field
+```{r}
+new<-read.csv("/Users/aldoa/OneDrive/Desktop/temp field cfu survey.csv")
+
+library(ggplot2)
+library(cowplot)
+
+plot_new<-ggplot(new,aes(x= Treatment  , y=log, fill= Treatment)) + geom_boxplot(lwd=1.25, fatten = 1, alpha=1) +
+    # geom_point(position= position_jitterdodge(jitter.width = 0.3,jitter.height = 0,dodge.width = 0.75, seed = NA),shape = 21, alpha = 0.4, size = 8) +
+    theme_cowplot()+
+   theme(
+     legend.position = 0,
+  text=element_text(size=16),
+  axis.text.x=element_text(angle=90, hjust=1),
+  axis.text= element_text(size=16),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  xlab("Mosquito Background") + ylab("log(CFU/mL)")
+
+qqnorm( residuals(aov(log ~ Treatment, data= new)),pch=1,frame=FALSE)
+qqline( residuals(aov(log ~ Treatment, data= new)),lwd=1)
+plot(fitted(aov(log ~ Treatment, data= new)),
+  residuals(aov(log ~ Treatment, data= new)),xlab="fitted", 
+  ylab= "raw residual",main= "Density by Sample Type")
+  abline(h=0, lty=2)
+  plot(hist(new$log, xlab = "CFU Density"))
+
+library(car)
+  
+leveneTest(log~Treatment, data = new)
+
+model=lm( new$log ~ new$Treatment ) # run ANOVA (global test)
+ANOVA=aov(model)
+summary(model)
+
+library(tidyverse)
+library(rstatix)
+stat.test <- new %>%
+  t_test(log ~ Treatment, var.equal = TRUE)
+stat.test
+```
+

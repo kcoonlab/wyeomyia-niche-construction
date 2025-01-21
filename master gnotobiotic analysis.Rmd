@@ -1,0 +1,1080 @@
+---
+title: "master gnotobiotic analysis"
+author: "Aldo A. Arellano"
+date: "2024-02-13"
+output: html_document
+---
+```{r}
+library(phyloseq)
+library(phytools)
+library(ggplot2)
+library(tidyverse)
+library(decontam)
+library(data.table)
+library(cowplot)
+```
+Tree prepping
+```{r}
+pick_new_outgroup <- function(tree.unrooted){
+    require("magrittr")
+    require("data.table")
+    require("ape") # ape::Ntip
+    # tablify parts of tree that we need.
+    treeDT <-
+      cbind(
+        data.table(tree.unrooted$edge),
+        data.table(length = tree.unrooted$edge.length)
+      )[1:Ntip(tree.unrooted)] %>%
+      cbind(data.table(id = tree.unrooted$tip.label))
+    # Take the longest terminal branch as outgroup
+    new.outgroup <- treeDT[which.max(length)]$id
+    return(new.outgroup)
+}
+unrooted_qiime_default<-read.newick(file="c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/tree.nwk")
+new.outgroup = pick_new_outgroup(unrooted_qiime_default)
+rootedTree = ape::root(unrooted_qiime_default, outgroup=new.outgroup, resolve.root=TRUE)
+phy_tree<-read_tree(rootedTree, errorIfNULL=FALSE)
+```
+Other pieces:
+```{r}
+otu_csv<-read.csv("c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/otu_table.csv")
+otu_rows_fixed <- data.frame(otu_csv, row.names = 1)
+OTU_16S<-otu_table(otu_rows_fixed,taxa_are_rows = TRUE)
+
+tax_csv<-read.csv("c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/taxonomy.csv")
+tax_rows_fixed<-data.frame(tax_csv, row.names = 1)
+tax_matrix<-as.matrix(tax_rows_fixed)
+TAX_16S<-tax_table(tax_matrix, errorIfNULL=TRUE)
+
+meta_csv<-read.csv("c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/meta_gno.csv")
+
+meta_rows<-data.frame(meta_csv, row.names = 1)
+
+META_16S<-sample_data(meta_rows)
+
+##Initial Phyloseq
+
+seq_object<-phyloseq(OTU_16S,TAX_16S,META_16S,phy_tree)
+saveRDS(seq_object,"c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/initial_phyloseq_gno")
+```
+
+Decontam procedure (instead of just removing reads that show up in negatives, which is generally not recommended)- https://benjjneb.github.io/decontam/vignettes/decontam_intro.html:
+
+Inspect library size:
+```{r}
+gnoto_clean_me<-readRDS("c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/initial_phyloseq_gno")
+df <- as.data.frame(sample_data(gnoto_clean_me)) # Put sample_data into a ggplot-friendly data.frame
+df$LibrarySize <- sample_sums(gnoto_clean_me)
+df <- df[order(df$LibrarySize),]
+df$Index <- seq(nrow(df))
+ggplot(data=df, aes(x=Index, y=LibrarySize, color=Sample_or_Control)) + geom_point()
+```
+
+Prevalence-based contaminant assignment  -  performs poorly for this full dataset due to systematic differences in the treatments, using a lower threshold
+```{r}
+sample_data(gnoto_clean_me)$is.neg <- sample_data(gnoto_clean_me)$Sample_or_Control == "Control"
+contamdf.prev05 <- isContaminant(gnoto_clean_me, method="prevalence", neg="is.neg", threshold=0.5)
+table(contamdf.prev05$contaminant)
+
+gno_prev<-contamdf.prev05[which(contamdf.prev05$contaminant=='TRUE'),]
+ps.noncontam <- prune_taxa(!contamdf.prev05$contaminant, gnoto_clean_me)
+```
+Frequency-based contaminant assignment
+```{r}
+contamdf.freq <- isContaminant(ps.noncontam, method="frequency", conc="Post_Quant")
+head(contamdf.freq)
+table(contamdf.freq$contaminant)
+gno_freq<-contamdf.freq[which(contamdf.freq$contaminant=='TRUE'),]
+gno_contaminant_reads<-c(rownames(gno_prev),rownames(gno_freq))
+ps.noncontam <- prune_taxa(!contamdf.freq$contaminant, ps.noncontam)
+```
+Sanity check: how do putative contaminant reads look?
+```{r}
+# what proportion of reads do putative 'contaminants' comprise?
+# all contaminants pooled
+df_tax<-as.data.frame(tax_table(seq_object)) # extract taxonomy from your phyloseq object as a dataframe
+
+df_tax$contaminant_status <- "not contaminant" # label those called contaminant by prevalence
+df_tax$contaminant_status[rownames(df_tax) %in% row.names(gno_prev) | rownames(df_tax) %in% row.names(gno_freq)] <- "contaminant" 
+
+tax_matrix<-as.matrix(df_tax) # convert back to phyloseq style
+TAX_16S<-tax_table(tax_matrix, errorIfNULL=TRUE)
+
+phyloseq_for_contaminant_rel_abund_pooled<-phyloseq(sample_data(seq_object), otu_table(seq_object), TAX_16S, phy_tree(seq_object))
+
+ps.norm = transform_sample_counts(phyloseq_for_contaminant_rel_abund_pooled, function(x) x / sum(x) ) # convert raw counts to relative abundance
+melted<-psmelt(ps.norm) # melt you phyloseq object
+plot<-melted%>% # plot!
+    ggplot(aes(x=Sample, y=Abundance, fill=contaminant_status))+
+    geom_col() +
+     xlab("Sample")+ ylab("Proportion of Reads")+
+  facet_grid(.~gno_trt, scales = "free_x", space = "free") + 
+    theme_cowplot() + theme(text = element_text(size=15)) + scale_y_continuous(expand = c(0,0)) + theme(axis.text.x = element_text(angle= 90, size=15), axis.text.y = element_text(size=15)) + scale_fill_manual(values= c("grey50","#8cd752"))
+plot$labels$fill<-"Contaminant status"
+plot
+
+# each contaminant separately
+for (contaminant in unique(as.list(row.names(gno_prev),row.names(gno_freq)))) {
+  
+  temp<-melted %>% filter(OTU==contaminant)
+
+  temp_plot<- temp%>%
+    ggplot(aes(x=Sample, y=Abundance, fill=contaminant_status))+
+    geom_col() +
+     xlab("Sample")+ ylab("Proportion of Reads")+ ggtitle(contaminant)+
+  facet_grid(.~gno_trt, scales = "free_x", space = "free") + 
+    theme_cowplot() + theme(text = element_text(size=15)) + scale_y_continuous(expand = c(0,0)) + theme(axis.text.x = element_text(angle= 90, size=15), axis.text.y = element_text(size=12)) + scale_fill_manual(values= c("grey50","#8cd752"))
+temp_plot$labels$fill<-"Contaminant status"
+print(temp_plot)
+}
+```
+Removing samples lacking sufficient reads + archaea, mitochondria, chloroplasts
+```{r}
+greater_than_100_ASVs <- prune_samples(sample_sums(gnoto_clean_me)>=100, ps.noncontam)
+no_controls<-prune_samples(sample_data(greater_than_100_ASVs)$Sample_or_Control == "Sample", greater_than_100_ASVs)
+no_controls<-subset_taxa(no_controls, Class!="Chloroplast")
+no_controls<-subset_taxa(no_controls, Family!="Mitochondria")
+
+gno_nonzero<-prune_taxa(taxa_sums(no_controls) > 0, no_controls)
+bacteria_only<-subset_taxa(gno_nonzero, Kingdom!="Archaea")
+saveRDS(bacteria_only,"c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/gno_contam_removed")
+
+gno_physeq<-readRDS("c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/gno_contam_removed")
+```
+Fixing tax_table
+```{r}
+tax <- data.frame(tax_table(gno_physeq))
+
+tax.clean <- data.frame(row.names = row.names(tax),
+Kingdom = str_replace(tax[,1], "D_0__",""),
+Phylum = str_replace(tax[,2], "D_1__",""),
+Class = str_replace(tax[,3], "D_2__",""),
+Order = str_replace(tax[,4], "D_3__",""),
+Family = str_replace(tax[,5], "D_4__",""),
+Genus = str_replace(tax[,6], "D_5__",""),
+Species = str_replace(tax[,7], "D_6__",""),
+stringsAsFactors = FALSE)
+tax.clean[is.na(tax.clean)] <- ""
+
+for (i in 1:7){ tax.clean[,i] <- as.character(tax.clean[,i])}
+####### Fille holes in the tax table
+tax.clean[is.na(tax.clean)] <- ""
+for (i in 1:nrow(tax.clean)){
+  if (tax.clean[i,2] == ""){
+kingdom <- paste("Kingdom_", tax.clean[i,1], sep = "")
+tax.clean[i, 2:7] <- kingdom
+} else if (tax.clean[i,3] == ""){
+phylum <- paste("Phylum_", tax.clean[i,2], sep = "")
+tax.clean[i, 3:7] <- phylum
+} else if (tax.clean[i,4] == ""){
+class <- paste("Class_", tax.clean[i,3], sep = "")
+tax.clean[i, 4:7] <- class
+} else if (tax.clean[i,5] == ""){
+order <- paste("Order_", tax.clean[i,4], sep = "")
+tax.clean[i, 5:7] <- order
+} else if (tax.clean[i,6] == ""){
+family <- paste("Family_", tax.clean[i,5], sep = "")
+tax.clean[i, 6:7] <- family
+} else if (tax.clean[i,7] == ""){
+tax.clean$Species[i] <- paste("Genus",tax.clean$Genus[i], sep = "_")
+}
+}
+
+tax_table(gno_physeq) <- as.matrix(tax.clean)
+# write.csv(tax.clean,"merge_tax.csv")
+# for viz ease sub-groups of Firmicutes are renamed to Firmicutes at the phylum level, downstream Tax ID is maintained as distinct
+# tax_table<-read.csv("c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/merge taxa.csv")
+
+# tax_rows_fixed<-data.frame(tax_table, row.names = 1)
+# tax_matrix<-as.matrix(tax_rows_fixed)
+# TAX_16S<-tax_table(tax_matrix, errorIfNULL=TRUE)
+# 
+# gno_physeq<-phyloseq(TAX_16S,sample_data(gno_physeq),phy_tree(gno_physeq),otu_table(gno_physeq))
+```
+What are the dominant taxa present in the dataset?
+```{r}
+phylum_glom<-tax_glom(gno_physeq, taxrank="Phylum", NArm=TRUE, bad_empty=c(NA, "", " ", "\t"))
+phylum_glom_df<-as.data.frame(as.matrix(tax_table(phylum_glom)))
+
+# make a list of all the phyla to loop through
+list<-as.list(unique(phylum_glom_df$Phylum))
+
+df<-data.frame(0,0,0)
+colnames(df)<-c("Phylum","Unique ASVs","Total Reads")
+count<-1
+
+for (taxon in list) {
+  temp_phy_object<- subset_taxa(gno_physeq, Phylum== taxon)
+  unique_ASVs<- nrow(as.data.frame(as.matrix(tax_table(temp_phy_object))))
+  sum<-sum(sample_sums(temp_phy_object))
+ 
+  df[count,1]<-taxon
+  df[count,2]<- unique_ASVs
+  df[count,3]<- sum
+  
+  count<- count+1
+}
+df_ordered<- df[order(-df$`Total Reads`),]
+# this dataframe should let you know how many ASVs are associated with each phyla in your dataset and give you an idea of how many reads got assigned to each of these groups
+df_ordered$relative_read_abundance<-df_ordered$`Total Reads`/sum(df_ordered$`Total Reads`)
+df_ordered
+```
+
+rare curve and unsaturated removal
+```{r}
+p<-ranacapa::ggrare(gno_physeq, step = 1000, color = "gno_type", se = FALSE, plot = FALSE, label="Sample")
+p + facet_wrap(~gno_type) +  geom_line(size=1) + coord_cartesian(xlim =c(0, 10000), ylim = c(0, 150)) + theme_cowplot() + theme(panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank())
+
+#GNO67, GNO62 fail to saturate both adult samples
+
+unsat_list<-c("GNO67", "GNO62")
+
+length(unsat_list)
+
+# remove them!
+# install.packages("Hmisc")
+library(Hmisc)
+data<-as.data.frame(sample_data(gno_physeq))
+
+data_sub<-data[which(rownames(data) %nin% unsat_list),]
+# nrow(data_sub)
+META_16S<-sample_data(data_sub)
+
+unsat_removed_physeq<-phyloseq(META_16S,tax_table(gno_physeq),phy_tree(gno_physeq),otu_table(gno_physeq))
+unsat_removed_physeq<-prune_taxa(taxa_sums(unsat_removed_physeq) > 0, unsat_removed_physeq)
+
+saveRDS(unsat_removed_physeq,"c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/gno_final_unsat_removed")
+unsat_removed_physeq<-readRDS("c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/gno_final_unsat_removed")
+
+p<-ranacapa::ggrare(unsat_removed_physeq, step = 1000, color = "gno_trt", se = FALSE, plot = FALSE)
+p + facet_wrap(~gno_trt) +  geom_line(size=1) + coord_cartesian(xlim =c(0, 2500), ylim = c(0, 120)) + theme_cowplot() + theme(panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank())
+
+sample_data(unsat_removed_physeq)
+```
+Microshades
+```{r}
+library(microshades)
+# install.packages("ggh4x")
+library(ggh4x)
+
+#for purposes of initial viz maybe we do not need  the really small groups probably
+
+temp<-prune_samples(sample_data(unsat_removed_physeq)$gno_type !="stock" & sample_data(unsat_removed_physeq)$gno_type !="adult",unsat_removed_physeq)
+temp<-prune_samples(sample_data(temp)$gno_trt !="un_field 10x",temp)
+temp<-prune_samples(sample_data(temp)$gno_trt !="mom:un_field (1:10)",temp)
+unique(sample_data(temp)$gno_trt)
+
+sample_data(temp)$gno_trt<-factor(sample_data(temp)$gno_trt, levels=c('dil_cnv','cnv','mom','lab','un_field','col_field','mom:lab (1:1)','mom:lab (10:1)','mom:un_field (1:1)','mom:un_field (10:1)'))
+
+mdf_prep <- prep_mdf(temp, remove_na = TRUE)
+color_obj <- microshades::create_color_dfs(mdf_prep, group_level= "Phylum", subgroup_level= "Genus", selected_groups = c("Proteobacteria", "Actinobacteriota", "Bacteroidota", "Firmicutes"))
+
+mdf <- color_obj$mdf
+cdf <- color_obj$cdf
+
+plot <- plot_microshades(mdf, cdf)
+legend <-custom_legend(mdf, cdf, subgroup_level = "Genus")
+
+facet_labels <- as_labeller(c(
+  "dil_cnv" = "dil_cnv","col_field" = "Colonized Field", "mom:un_field (10:1)"= "Parental:Field (10:1)", "un_field" = "Uncolonized Field",
+  "cnv" = "Conventionally Reared" ,"mom" = "Parental", "lab" = "Laboratory", "mom:lab (1:1)" = "Parental:Laboratory (1:1)","mom:lab (10:1)" = "Parental:Laboratory (10:1)", "mom:un_field (1:1)" = "Parental:Field (1:1)" ))
+
+plot_diff <- plot + scale_y_continuous(labels = scales::percent, expand = expansion(0)) +
+  theme(legend.position = "none")  +
+  # theme(axis.text.x = element_text(size= 20)) +
+  facet_nested(~gno_trt, scales = "free_x", space="free_x", nest_line = element_line(colour = "black"), labeller = facet_labels) +
+  theme(axis.text.x = element_blank() )+ 
+  # theme(axis.text.x = element_text(margin = margin(t = 10))) +
+  # theme(axis.text.x = element_text(hjust = 0)) +
+  theme(plot.margin = margin(6,20,6,6)) + xlab("Sample Group") +
+  theme(ggh4x.facet.nestline = element_line(linetype = 3))
+
+plot_new<-plot_grid(plot_diff, legend,  rel_widths = c(1, .25))
+
+# unique(sample_data(temp)$gno_type)
+
+# ggsave("new_figure_gno.pdf",plot=plot_new, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=4,width=25)
+```
+
+Visualize ordination
+```{r message=FALSE, warning=FALSE}
+viz <- prune_samples(sample_data(unsat_removed_physeq)$gno_trt != "un_field 10x", unsat_removed_physeq)
+viz <- prune_samples(sample_data(viz)$gno_trt != "mom:un_field (1:10)", viz)
+viz <- prune_samples(sample_data(viz)$gno_trt != "dil_cnv", viz)
+
+sample_data(viz)$interaction<-interaction(sample_data(viz)$gno_trt,sample_data(viz)$gno_type)
+
+unique(sample_data(viz)$gno_trt)
+
+temp_meta<-as.data.frame(as.matrix(sample_data(viz)))
+
+temp_meta[temp_meta$gno_type=="adult",]
+
+temp_meta<-temp_meta %>%
+     mutate(interaction = dplyr::recode(interaction, `cnv.adult` = "adult sample",
+         `lab.adult` = "adult sample", 
+         `mom.adult` = "adult sample",
+         `mom:un_field (1:1).adult` = "adult sample",
+         `mom:lab (10:1).adult` = "adult sample",
+         `mom:lab (1:1).adult` = "adult sample",
+         `mom:un_field (10:1).adult` = "adult sample",
+         `un_field.adult`="adult_sample",
+         `col_field.adult`="adult sample"))
+temp_meta$secondary_type<- temp_meta$gno_type
+```
+
+```{r}
+temp_meta<-temp_meta %>%
+     mutate(secondary_type = dplyr::recode(secondary_type, `pupation water` = "Late larval water",
+         `arrested water` = "Late larval water",
+         `adult` = "Adult pool",
+         `stock` = "Glycerol stock"))
+
+temp_meta<-temp_meta %>%
+     mutate(gno_trt = dplyr::recode(gno_trt, `cnv` = "Conventionally Reared",
+         `cnv stock` = "Conventionally Reared",
+         `un_field` = "Uncolonized Field", 
+         `un_field stock` = "Uncolonized Field",
+         `lab` = "Lab",
+         `lab stock` = "Lab",
+         `mom` = "Parental",
+         `mom stock` = "Parental",
+         `mom:un_field (1:1)` = "Parental:Uncolonized Field (1:1)",
+         `mom:lab (1:1)` = "Parental:Lab (1:1)",
+         `mom:lab (10:1)` = "Parental:Lab (10:1)",
+         `mom:un_field (10:1)`="Parental:Uncolonized Field (10:1)",
+         `col_field` = "Colonized Field"))
+
+unique(temp_meta$gno_trt)
+
+```
+
+```{r message=FALSE, warning=FALSE}
+META_ord_16S<-sample_data(temp_meta)
+
+viz<-phyloseq(META_ord_16S, tax_table(viz), otu_table(viz), phy_tree(viz))
+
+ps_clr<-microbiome::transform(viz, "clr") 
+ord_clr <- phyloseq::ordinate(ps_clr, "RDA", distance="euclidean")
+library(viridis)
+library(viridisLite)
+temp_ord<-phyloseq::plot_ordination(viz, ord_clr, type="samples", color= "gno_trt", shape= "secondary_type") +
+  stat_ellipse(aes(group=interaction(sample_data(viz)$gno_trt,sample_data(viz)$secondary_type)),type= "norm", linetype = 2, lwd = 1) +
+  geom_point(aes(size= 2))+
+  theme_cowplot() +
+  # ylab("PC2 [15.3%]") + xlab("PC1 [36.4%]") +
+  theme(
+  text=element_text(size=18),
+  legend.title = element_text(size=18),
+  legend.text = element_text(size=18),
+  legend.margin = margin(6, 6, 6, 6),legend.box.background = element_rect(color="grey70",size=0.1),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  guides(size = "none") + scale_color_viridis(discrete = TRUE) 
+
+temp_ord$labels$colour <- "Treatment"
+temp_ord$labels$shape<- "Sample Type"
+
+# ggsave("new_figure_gno_ordination.png",plot=temp_ord, path = "c:/Users/aldoa/OneDrive/Desktop/",device="png",dpi=320, height=6,width=10)
+
+```
+
+Generate summary diversity data
+```{r}
+seq_object<-unsat_removed_physeq
+a<-plot_richness(seq_object, x = "samples", measures="Observed")
+summary<-a$data
+ observed<-summary[,c(12,5,9,14,1)]
+Total_Reads<-sample_sums(seq_object)
+median(Total_Reads)
+sum(Total_Reads)
+
+f<-as.data.frame(Total_Reads)
+f<-as.data.frame(f)
+colnames(f)="Total_Reads"
+total.reads <- tibble::rownames_to_column(f, "samples")
+
+total_reads_obs<-merge(observed,total.reads)
+
+library(breakaway)
+
+rich<-breakaway(seq_object)
+
+rich_values<-rich %>% summary %$% estimate
+rich_error<-rich %>% summary %$% error
+
+f<-as.data.frame(rich_values)
+f<-as.data.frame(f)
+colnames(f)="Breakaway Estimate of Richness"
+rich_final <- tibble::rownames_to_column(f, "samples")
+
+f<-as.data.frame(rich_error)
+f<-as.data.frame(f)
+colnames(f)="Breakaway Error"
+rich_error <- tibble::rownames_to_column(f, "samples")
+
+merged_rich<-merge(rich_final,rich_error)
+
+library(DivNet)
+pick_base(t(otu_table(seq_object)), automatic_cutoff = TRUE)
+# 438dc2a2ea2405a782df5830ae62100e
+# shannon<-divnet(seq_object, base= "438dc2a2ea2405a782df5830ae62100e")
+
+shannon_estimates <- shannon$shannon %>% summary %$% estimate
+shannon_ses <- sqrt(shannon$`shannon-variance`)
+
+f<-as.data.frame(shannon_estimates)
+f<-as.data.frame(f)
+colnames(f)="Shannon Sample-Wise"
+shannon_final<- tibble::rownames_to_column(f, "samples")
+f<-as.data.frame(shannon_ses)
+f<-as.data.frame(f)
+colnames(f)="Shannon Error"
+shannon_error <- tibble::rownames_to_column(f, "samples")
+
+merged_shannon<-merge(shannon_final,shannon_error)
+
+merge_1<-merge(total_reads_obs,merged_rich)
+
+merge_2<-merge(merge_1,merged_shannon)
+merge_2<- merge_2 %>% filter(gno_trt!= "dil_cnv" & gno_trt!= "un_field 10x" & gno_trt!="mom:un_field (1:10)")
+merge_2<- merge_2 %>%
+mutate(gno_type = dplyr::recode(gno_type, `pupation water` = "late larval water",
+         `arrested water` = "late larval water"))
+ # write.csv(merge_2,"df_hypothesis_tests_gno_diversity.csv")
+
+# tangent to make sample detail for larval passaging supplementary table 7
+# supp_table_3<-merge_2[,-c(6:7)]
+supp_table_7<-merge_2
+colnames(supp_table_7)[1]<-"Sample ID"
+colnames(supp_table_7)[2]<-"Treatment"
+colnames(supp_table_7)[5]<-"Pre-pooling DNA (ng/uL)"
+colnames(supp_table_7)[4]<-"Observed ASVs"
+colnames(supp_table_7)[6]<-"Total Reads"
+colnames(supp_table_7)[3]<-"Sample Type"
+
+supp_table_7<-supp_table_7[,c(1,2,3,5,6,4,7:10)]
+# write.csv(supp_table_7,"Supplementary Table 7.csv")
+```
+
+Diversity hypothesis testing using `betta`
+```{r}
+#relative to cnv
+div_df<-read.csv("./df_hypothesis_tests_gno_diversity.csv")
+# does div differ from 48 hr to 12 day timepoint generally?
+df_water_div<-div_df[div_df$gno_type=="late larval water",]
+# shannon
+a <- betta(formula = Shannon.Sample.Wise ~ gno_trt, 
+                      ses = Shannon.Error, data = df_water_div)
+a$table
+# richness
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ gno_trt, 
+                      ses = Breakaway.Error, data = df_water_div)
+b$table
+```
+
+```{r}
+# relative to lab
+df_water_div$gno_trt<-factor(df_water_div$gno_trt,levels= c("lab","mom","mom:lab (1:1)","col_field","mom:lab (10:1)","mom:un_field (1:1)","un_field","cnv","mom:un_field (10:1)"))
+# shannon
+a <- betta(formula = Shannon.Sample.Wise ~ gno_trt, 
+                      ses = Shannon.Error, data = df_water_div)
+a$table
+# richness
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ gno_trt, 
+                      ses = Breakaway.Error, data = df_water_div)
+b$table
+
+
+# relative to parental
+df_water_div$gno_trt<-factor(df_water_div$gno_trt,levels= c("mom","lab","mom:lab (1:1)","col_field","mom:lab (10:1)","mom:un_field (1:1)","un_field","cnv","mom:un_field (10:1)"))
+# shannon
+a <- betta(formula = Shannon.Sample.Wise ~ gno_trt, 
+                      ses = Shannon.Error, data = df_water_div)
+a$table
+# richness
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ gno_trt, 
+                      ses = Breakaway.Error, data = df_water_div)
+b$table
+# relative to Parental:Lab (1:1)
+df_water_div$gno_trt<-factor(df_water_div$gno_trt,levels= c("mom:lab (1:1)","mom","lab","col_field","mom:lab (10:1)","mom:un_field (1:1)","un_field","cnv","mom:un_field (10:1)"))
+# shannon
+a <- betta(formula = Shannon.Sample.Wise ~ gno_trt, 
+                      ses = Shannon.Error, data = df_water_div)
+a$table
+# richness
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ gno_trt, 
+                      ses = Breakaway.Error, data = df_water_div)
+b$table
+
+
+
+# relative to Uncolonized Field
+df_water_div$gno_trt<-factor(df_water_div$gno_trt,levels= c("un_field","mom:lab (1:1)","mom","lab","col_field","mom:lab (10:1)","mom:un_field (1:1)","cnv","mom:un_field (10:1)"))
+# shannon
+a <- betta(formula = Shannon.Sample.Wise ~ gno_trt, 
+                      ses = Shannon.Error, data = df_water_div)
+a$table
+# richness
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ gno_trt, 
+                      ses = Breakaway.Error, data = df_water_div)
+b$table
+
+# relative to Parental:Uncolonized Field (1:1)
+
+df_water_div$gno_trt<-factor(df_water_div$gno_trt,levels= c("mom:un_field (1:1)","un_field","mom:lab (1:1)","mom","lab","col_field","mom:lab (10:1)","cnv","mom:un_field (10:1)"))
+# shannon
+a <- betta(formula = Shannon.Sample.Wise ~ gno_trt, 
+                      ses = Shannon.Error, data = df_water_div)
+a$table
+# richness
+b <- betta(formula = Breakaway.Estimate.of.Richness ~ gno_trt, 
+                      ses = Breakaway.Error, data = df_water_div)
+b$table
+
+```
+
+GLOBAL: Permanova and permdisp
+```{r}
+s_clr<-prune_samples(sample_data(viz)$gno_type != "stock" & sample_data(viz)$gno_type != "adult",viz) 
+                     
+                     
+# & sample_data(viz)$gno_trt != "Uncolonized Field"  & sample_data(viz)$gno_trt != "Colonized Field" &  sample_data(viz)$gno_trt != "Parental:Uncolonized Field (1:1)" &  sample_data(viz)$gno_trt != "Parental:Uncolonized Field (10:1)",viz )
+                     
+                     # & sample_data(viz)$gno_trt != "Conventionally Reared",viz)
+
+s_clr<-prune_taxa(taxa_sums(s_clr) > 0, s_clr)
+
+# ps_clr<-microbiome::transform(s_clr, "clr") 
+# ord_clr <- phyloseq::ordinate(ps_clr, "RDA", distance="euclidean")
+# library(viridis)
+# library(viridisLite)
+# temp_ord<-phyloseq::plot_ordination(s_clr, ord_clr, type="samples", color= "gno_trt", shape= "secondary_type") +
+#   stat_ellipse(aes(group=interaction(sample_data(s_clr)$gno_trt,sample_data(s_clr)$secondary_type)),type= "norm", linetype = 2, lwd = 1) +
+#   geom_point(aes(size= 2))+
+#   theme_cowplot() +
+#   # ylab("PC2 [15.3%]") + xlab("PC1 [36.4%]") +
+#   theme(
+#   text=element_text(size=18),
+#   legend.title = element_text(size=18),
+#   legend.text = element_text(size=18),
+#   legend.margin = margin(6, 6, 6, 6),legend.box.background = element_rect(color="grey70",size=0.1),
+#   panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  guides(size = "none") + scale_color_viridis(discrete = TRUE) 
+# 
+# temp_ord$labels$colour <- "Treatment"
+# temp_ord$labels$shape<- "Sample Type"
+
+```
+
+PERMANOVA + PERMDISP
+```{r}
+# s_clr<-prune_taxa(taxa_sums(viz) > 0, viz)
+s_clr<-microbiome::transform(s_clr, "clr")
+clr_dist_matrix <- phyloseq::distance(s_clr, method = "euclidean") 
+
+# sample_data(s_clr)$interaction<-interaction(sample_data(s_clr)$gno_trt,sample_data(s_clr)$gno_type)
+# unique(sample_data(s_clr)$gno_trt)
+
+vegan::adonis2(clr_dist_matrix ~ phyloseq::sample_data(s_clr)$gno_trt)
+
+pair_adonis<-pairwiseAdonis::pairwise.adonis(clr_dist_matrix,sample_data(s_clr)$gno_trt, reduce = NULL)
+
+pairs_of_interest<-c("Lab vs Conventionally Reared","Lab vs Parental","Lab vs Parental:Lab (1:1)","Lab vs Parental:Lab (10:1)","Conventionally Reared vs Parental","Parental:Uncolonized Field (1:1) vs Parental","Parental vs Parental:Uncolonized Field (10:1)","Colonized Field vs Uncolonized Field","Parental:Lab (10:1) vs Parental","Parental:Lab (10:1) vs Parental:Lab (1:1)","Parental vs Parental:Lab (1:1)","Conventionally Reared vs Parental:Lab (1:1)","Conventionally Reared vs Parental:Lab (10:1)", "Parental:Uncolonized Field (1:1) vs Uncolonized Field","Parental:Uncolonized Field (1:1) vs Parental:Uncolonized Field (10:1)","Uncolonized Field vs Parental:Uncolonized Field (10:1)")
+
+length(unique(pairs_of_interest))
+
+pair_adonis_sub<-pair_adonis %>% filter(pairs %in% pairs_of_interest)
+
+pair_adonis_sub$p.adjusted<-p.adjust(pair_adonis_sub$p.value,method="bonferroni")
+pair_adonis_sub<-pair_adonis_sub[,-8]
+adonis_df<-pair_adonis_sub %>% filter(p.adjusted<0.05)
+
+write.csv(pair_adonis_sub,'C:/Users/aldoa/OneDrive/Desktop/temp_for_adonis_gno.csv')
+
+library(vegan)
+
+ps.disper_sample_type <- betadisper(clr_dist_matrix, sample_data(s_clr)$gno_trt)
+disper_test_sample_id<-permutest(ps.disper_sample_type, pairwise = TRUE)
+summ<-summary(permustats(disper_test_sample_id))
+
+a<-purrr::pluck(summ,'statistic')
+b<-purrr::pluck(summ,'p')
+c<-as.data.frame(a)
+d<-as.data.frame(b)
+rownames(d) = rownames(c)
+rownames(c)
+d <- cbind(rownames(d), data.frame(d, row.names=NULL))
+c <- cbind(rownames(c), data.frame(c, row.names=NULL))
+colnames(c)= c("Comparison","PERMDISP Test Statistic")
+colnames(d)= c("Comparison","PERMDISP p-value")
+
+betadisper_table_null<-merge(c,d)
+
+pairs_of_interest<-c("Conventionally Reared-Lab (t)","Lab-Parental (t)","Lab-Parental:Lab (1:1) (t)","Lab-Parental:Lab (10:1) (t)","Conventionally Reared-Parental (t)","Parental-Parental:Uncolonized Field (1:1) (t)","Parental-Parental:Uncolonized Field (10:1) (t)","Colonized Field-Uncolonized Field (t)","Parental-Parental:Lab (10:1) (t)","Parental:Lab (1:1)-Parental:Lab (10:1) (t)","Parental-Parental:Lab (1:1) (t)","Conventionally Reared-Parental:Lab (1:1) (t)","Conventionally Reared-Parental:Lab (10:1) (t)","Parental:Uncolonized Field (1:1)-Parental:Uncolonized Field (10:1) (t)","Parental:Uncolonized Field (1:1)-Uncolonized Field (t)","Parental:Uncolonized Field (10:1)-Uncolonized Field (t)")
+
+betadisper_table<-betadisper_table_null %>% filter(Comparison %in% pairs_of_interest)
+betadisper_table$`PERMDISP p-value (adj)`<-p.adjust(betadisper_table$`PERMDISP p-value`)
+
+disper_df<-betadisper_table %>% filter(`PERMDISP p-value (adj)` <0.05)
+
+# pairs_of_interest[pairs_of_interest %nin% betadisper_table$Comparison]
+
+# write.csv(betadisper_table,'C:/Users/aldoa/OneDrive/Desktop/temp_disper_gno_full.csv')
+```
+
+
+mom vs cnv subsetting
+```{r}
+aldex_physeq<-prune_samples(sample_data(unsat_removed_physeq)$gno_type != "stock" & sample_data(unsat_removed_physeq)$gno_type != "adult" & sample_data(unsat_removed_physeq)$gno_trt != "mom:un_field (1:10)" & sample_data(unsat_removed_physeq)$gno_trt != "un_field 10x" & sample_data(unsat_removed_physeq)$gno_trt != "dil_cnv", unsat_removed_physeq)
+
+aldex_physeq_mom_vs_cnv<- prune_samples(sample_data(aldex_physeq)$gno_trt == "mom" | sample_data(aldex_physeq)$gno_trt == "cnv", aldex_physeq)
+aldex_physeq_mom_vs_cnv<-prune_taxa(taxa_sums(aldex_physeq_mom_vs_cnv) > 0, aldex_physeq_mom_vs_cnv)
+
+sample_data(aldex_physeq_mom_vs_cnv)
+
+```
+
+FOR EDITING ALDEX PLOTS:
+COLOR
+`=IF(AND(R2="Proteobacteria",P2="both"),"pro_color",(IF(AND(R2="Actinobacteriota",P2="both"),"actino_color",IF(AND(R2="Bacteroidota",P2="both"),"bac_color",IF(AND(R2="Firmicutes",P2="both"),"firm_color",IF(P2="both","other_color","non_sig_color"))))))`
+POINTLABEL
+`=IF(Z2=3,V2,"")`
+SIZE
+`=IF(P2="both",3,2)`
+
+mom vs cnv - graphing
+```{r}
+library(ALDEx2)
+aldex.clr.asv.water.mom.vs.cnv<-aldex.clr(as.data.frame(otu_table(aldex_physeq_mom_vs_cnv)),
+                             sample_data(aldex_physeq_mom_vs_cnv)$gno_trt,
+                             mc.samples=128,
+                             denom="all",
+                             verbose=TRUE,
+                             useMC=FALSE)
+
+aldex.clr.asv.water.mom.vs.cnv.t.test<-aldex.ttest(aldex.clr.asv.water.mom.vs.cnv, paired.test = FALSE, hist.plot = FALSE, verbose = FALSE)
+aldex.clr.asv.water.mom.vs.cnv.t.test.effect <- aldex.effect(aldex.clr.asv.water.mom.vs.cnv, CI=T, verbose=FALSE)
+
+aldex.df.cnv.vs.mom <- data.frame(aldex.clr.asv.water.mom.vs.cnv.t.test,aldex.clr.asv.water.mom.vs.cnv.t.test.effect)
+
+par(mfrow=c(1,2))
+aldex.plot(aldex.df.cnv.vs.mom, type="MA", test="welch")
+aldex.plot(aldex.df.cnv.vs.mom, type="MW", test="welch")
+
+
+aldex.df.cnv.vs.mom$one_or_two<-"none"
+
+aldex.df.cnv.vs.mom$one_or_two[which(aldex.df.cnv.vs.mom$we.eBH < 0.05 | aldex.df.cnv.vs.mom$wi.eBH < 0.05)] <-"one"
+aldex.df.cnv.vs.mom$one_or_two[which(aldex.df.cnv.vs.mom$we.eBH < 0.05 & aldex.df.cnv.vs.mom$wi.eBH < 0.05)] <-"both"
+
+
+taxa_info <- data.frame(tax_table(aldex_physeq_mom_vs_cnv))
+taxa_info <- taxa_info %>% rownames_to_column(var = "ASV")
+
+aldex.df.cnv.vs.mom<-aldex.df.cnv.vs.mom %>% rownames_to_column(var = "ASV")
+
+aldex.df.cnv.vs.mom <- left_join(aldex.df.cnv.vs.mom, taxa_info)
+
+# write.csv(aldex.df.cnv.vs.mom, 'C:/Users/aldoa/OneDrive/Desktop/temp_for_dispersion_plot_mom_vs_cnv.csv')
+
+unique(aldex.df.cnv.vs.mom$Genus[which(aldex.df.cnv.vs.mom$one_or_two=="both" & aldex.df.cnv.vs.mom$diff.btw>0)])
+
+aldex.df.cnv.vs.mom<-read.csv('C:/Users/aldoa/OneDrive/Desktop/temp_for_dispersion_plot_mom_vs_cnv.csv')
+
+aldex.df.cnv.vs.mom<-aldex.df.cnv.vs.mom %>%
+     mutate(color = dplyr::recode(color, `non_sig_color` = "grey50",
+         `pro_color` = "#5ba760", 
+         `actino_color` = "#f09938",
+         `bac_color` = "#5991c3",
+         `firm_color` = "#9593c1"))
+
+a<-ggplot(aldex.df.cnv.vs.mom, aes(x=diff.win,y=diff.btw)) +
+  xlab("Dispersion")+ ylab("Difference")+
+  geom_text_repel(aes(label = pointlabel), max.overlaps = 10000) +
+geom_point(aes(size= size, color= color))+
+  scale_color_identity()+
+  scale_size_identity()+
+  theme_cowplot() +  theme(
+  text=element_text(size=18),
+  legend.title = element_text(size=18),
+  legend.text = element_text(size=18),
+  legend.margin = margin(6, 6, 6, 6),legend.box.background = element_rect(color="grey70",size=0.1),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  guides(size = "none") + geom_abline(slope=1, intercept=0, linetype="dashed") + geom_abline(slope=-1, intercept=0, linetype="dashed")
+
+library(ggrepel)
+
+```
+
+mom vs lab - all
+```{r}
+aldex_physeq<-prune_samples(sample_data(unsat_removed_physeq)$gno_type != "stock" & sample_data(unsat_removed_physeq)$gno_type != "adult" & sample_data(unsat_removed_physeq)$gno_trt != "mom:field (1:10)" & sample_data(unsat_removed_physeq)$gno_trt != "field 10x", unsat_removed_physeq)
+
+aldex_physeq_mom_vs_lab<- prune_samples(sample_data(aldex_physeq)$gno_trt == "mom" | sample_data(aldex_physeq)$gno_trt == "lab", aldex_physeq)
+aldex_physeq_mom_vs_lab<-prune_taxa(taxa_sums(aldex_physeq_mom_vs_lab) > 0, aldex_physeq_mom_vs_lab)
+
+aldex.clr.asv.water.mom.vs.lab<-aldex.clr(as.data.frame(otu_table(aldex_physeq_mom_vs_lab)),
+                             sample_data(aldex_physeq_mom_vs_lab)$gno_trt,
+                             mc.samples=128,
+                             denom="all",
+                             verbose=TRUE,
+                             useMC=FALSE)
+
+aldex.clr.asv.water.mom.vs.lab.t.test<-aldex.ttest(aldex.clr.asv.water.mom.vs.lab, paired.test = FALSE, hist.plot = FALSE, verbose = FALSE)
+aldex.clr.asv.water.mom.vs.lab.t.test.effect <- aldex.effect(aldex.clr.asv.water.mom.vs.lab, CI=T, verbose=FALSE)
+
+aldex.df.lab.vs.mom <- data.frame(aldex.clr.asv.water.mom.vs.lab.t.test,aldex.clr.asv.water.mom.vs.lab.t.test.effect)
+
+par(mfrow=c(1,2))
+aldex.plot(aldex.df.lab.vs.mom, type="MA", test="welch")
+aldex.plot(aldex.df.lab.vs.mom, type="MW", test="welch")
+
+
+aldex.df.lab.vs.mom$one_or_two<-"one"
+
+aldex.df.lab.vs.mom$one_or_two[which(aldex.df.lab.vs.mom$we.eBH < 0.05 & aldex.df.lab.vs.mom$wi.eBH < 0.05)] <-"both"
+
+taxa_info <- data.frame(tax_table(aldex_physeq_mom_vs_lab))
+taxa_info <- taxa_info %>% rownames_to_column(var = "ASV")
+
+aldex.df.lab.vs.mom<-aldex.df.lab.vs.mom %>% rownames_to_column(var = "ASV")
+
+aldex.df.lab.vs.mom <- left_join(aldex.df.lab.vs.mom, taxa_info)
+
+ # write.csv(aldex.df.lab.vs.mom, 'C:/Users/aldoa/OneDrive/Desktop/temp_for_dispersion_plot_mom_vs_lab.csv')
+
+aldex.df.lab.vs.mom$Genus[which(aldex.df.lab.vs.mom$one_or_two=="both" & aldex.df.lab.vs.mom$diff.btw>0)]
+
+aldex.df.lab.vs.mom<-read.csv('C:/Users/aldoa/OneDrive/Desktop/temp_for_dispersion_plot_mom_vs_lab.csv')
+
+aldex.df.lab.vs.mom<-aldex.df.lab.vs.mom %>%
+     mutate(color = dplyr::recode(color, `non_sig_color` = "grey50",
+         `pro_color` = "#5ba760", 
+         `actino_color` = "#f09938",
+         `bac_color` = "#5991c3",
+         `firm_color` = "#9593c1"))
+
+b<-ggplot(aldex.df.lab.vs.mom, aes(x=diff.win,y=diff.btw)) +
+  xlab("Dispersion")+ ylab("Difference")+
+  geom_text_repel(aes(label = pointlabel), max.overlaps = 10000) +
+geom_point(aes(size= size, color= color))+
+  scale_color_identity()+
+  scale_size_identity()+
+  theme_cowplot() +  theme(
+  text=element_text(size=18),
+  legend.title = element_text(size=18),
+  legend.text = element_text(size=18),
+  legend.margin = margin(6, 6, 6, 6),legend.box.background = element_rect(color="grey70",size=0.1),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  guides(size = "none") + geom_abline(slope=1, intercept=0, linetype="dashed") + geom_abline(slope=-1, intercept=0, linetype="dashed")
+```
+
+cnv vs lab - all
+```{r}
+aldex_physeq<-prune_samples(sample_data(unsat_removed_physeq)$gno_type != "stock" & sample_data(unsat_removed_physeq)$gno_type != "adult" & sample_data(unsat_removed_physeq)$gno_trt != "mom:field (1:10)" & sample_data(unsat_removed_physeq)$gno_trt != "field 10x", unsat_removed_physeq)
+
+aldex_physeq_cnv_vs_lab<- prune_samples(sample_data(aldex_physeq)$gno_trt == "cnv" | sample_data(aldex_physeq)$gno_trt == "lab", aldex_physeq)
+aldex_physeq_cnv_vs_lab<-prune_taxa(taxa_sums(aldex_physeq_cnv_vs_lab) > 0, aldex_physeq_cnv_vs_lab)
+
+# sample_data(aldex_physeq_cnv_vs_lab)$gno_trt<-factor(sample_data(aldex_physeq_cnv_vs_lab)$gno_trt, levels=c("lab", "cnv"))
+
+aldex.clr.asv.water.cnv.vs.lab<-aldex.clr(as.data.frame(otu_table(aldex_physeq_cnv_vs_lab)),
+                             sample_data(aldex_physeq_cnv_vs_lab)$gno_trt,
+                             mc.samples=128,
+                             denom="all",
+                             verbose=TRUE,
+                             useMC=FALSE)
+
+aldex.clr.asv.water.cnv.vs.lab.t.test<-aldex.ttest(aldex.clr.asv.water.cnv.vs.lab, paired.test = FALSE, hist.plot = FALSE, verbose = FALSE)
+aldex.clr.asv.water.cnv.vs.lab.t.test.effect <- aldex.effect(aldex.clr.asv.water.cnv.vs.lab, CI=T, verbose=FALSE)
+
+aldex.df.lab.vs.cnv <- data.frame(aldex.clr.asv.water.cnv.vs.lab.t.test,aldex.clr.asv.water.cnv.vs.lab.t.test.effect)
+
+par(mfrow=c(1,2))
+aldex.plot(aldex.df.lab.vs.cnv, type="MA", test="welch")
+aldex.plot(aldex.df.lab.vs.cnv, type="MW", test="welch")
+
+
+aldex.df.lab.vs.cnv$one_or_two<-"one"
+
+aldex.df.lab.vs.cnv$one_or_two[which(aldex.df.lab.vs.cnv$we.eBH < 0.05 & aldex.df.lab.vs.cnv$wi.eBH < 0.05)] <-"both"
+
+taxa_info <- data.frame(tax_table(aldex_physeq_cnv_vs_lab))
+taxa_info <- taxa_info %>% rownames_to_column(var = "ASV")
+
+aldex.df.lab.vs.cnv<-aldex.df.lab.vs.cnv %>% rownames_to_column(var = "ASV")
+
+aldex.df.lab.vs.cnv <- left_join(aldex.df.lab.vs.cnv, taxa_info)
+
+# write.csv(aldex.df.lab.vs.cnv, 'C:/Users/aldoa/OneDrive/Desktop/temp_for_dispersion_plot_cnv_vs_lab.csv')
+
+aldex.df.lab.vs.cnv$Genus[which(aldex.df.lab.vs.cnv$one_or_two=="both"& aldex.df.lab.vs.cnv$diff.btw<0)]
+# aldex.df.lab.vs.mom$Genus[which(aldex.df.lab.vs.mom$one_or_two=="both" & aldex.df.lab.vs.mom$diff.btw>0)]
+
+aldex.df.lab.vs.cnv<-read.csv('C:/Users/aldoa/OneDrive/Desktop/temp_for_dispersion_plot_cnv_vs_lab.csv')
+
+aldex.df.lab.vs.cnv<-aldex.df.lab.vs.cnv %>%
+     mutate(color = dplyr::recode(color, `non_sig_color` = "grey50",
+         `pro_color` = "#5ba760", 
+         `actino_color` = "#f09938",
+         `bac_color` = "#5991c3",
+         `firm_color` = "#9593c1"))
+
+c<-ggplot(aldex.df.lab.vs.cnv, aes(x=diff.win,y=diff.btw)) +
+  xlab("Dispersion")+ ylab("Difference")+
+  geom_text_repel(aes(label = pointlabel), max.overlaps = 10000) +
+geom_point(aes(size= size, color= color))+
+  scale_color_identity()+
+  scale_size_identity()+
+  theme_cowplot() +  theme(
+  text=element_text(size=18),
+  legend.title = element_text(size=18),
+  legend.text = element_text(size=18),
+  legend.margin = margin(6, 6, 6, 6),legend.box.background = element_rect(color="grey70",size=0.1),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  guides(size = "none") + geom_abline(slope=1, intercept=0, linetype="dashed") + geom_abline(slope=-1, intercept=0, linetype="dashed")+ ylim(-25,15)
+
+library(ggrepel)
+
+```
+
+p:l (1:1) vs p:l (10:1)
+```{r}
+aldex_physeq<-prune_samples(sample_data(unsat_removed_physeq)$gno_type != "stock" & sample_data(unsat_removed_physeq)$gno_type != "adult" & sample_data(unsat_removed_physeq)$gno_trt != "mom:field (1:10)" & sample_data(unsat_removed_physeq)$gno_trt != "field 10x", unsat_removed_physeq)
+
+aldex_physeq_mixed_lab<- prune_samples(sample_data(aldex_physeq)$gno_trt == "mom:lab (1:1)" | sample_data(aldex_physeq)$gno_trt == "mom:lab (10:1)", aldex_physeq)
+aldex_physeq_mixed_lab<-prune_taxa(taxa_sums(aldex_physeq_mixed_lab) > 0, aldex_physeq_mixed_lab)
+
+# sample_data(aldex_physeq_cnv_vs_lab)$gno_trt<-factor(sample_data(aldex_physeq_cnv_vs_lab)$gno_trt, levels=c("lab", "cnv"))
+
+aldex.clr.asv.water.mixed.lab<-aldex.clr(as.data.frame(otu_table(aldex_physeq_mixed_lab)),
+                             sample_data(aldex_physeq_mixed_lab)$gno_trt,
+                             mc.samples=128,
+                             denom="all",
+                             verbose=TRUE,
+                             useMC=FALSE)
+
+aldex.clr.asv.water.mixed.lab.t.test<-aldex.ttest(aldex.clr.asv.water.mixed.lab, paired.test = FALSE, hist.plot = FALSE, verbose = FALSE)
+aldex.clr.asv.water.mixed.lab.t.test.effect <- aldex.effect(aldex.clr.asv.water.mixed.lab, CI=T, verbose=FALSE)
+
+aldex.df.mixed.lab <- data.frame(aldex.clr.asv.water.mixed.lab.t.test,aldex.clr.asv.water.mixed.lab.t.test.effect)
+
+par(mfrow=c(1,2))
+aldex.plot(aldex.df.mixed.lab, type="MA", test="welch")
+aldex.plot(aldex.df.mixed.lab, type="MW", test="welch")
+
+
+aldex.df.mixed.lab$one_or_two<-"one"
+
+aldex.df.mixed.lab$one_or_two[which(aldex.df.mixed.lab$we.eBH < 0.05 & aldex.df.mixed.lab$wi.eBH < 0.05)] <-"both"
+
+taxa_info <- data.frame(tax_table(aldex_physeq_mixed_lab))
+taxa_info <- taxa_info %>% rownames_to_column(var = "ASV")
+
+aldex.df.mixed.lab<-aldex.df.mixed.lab %>% rownames_to_column(var = "ASV")
+
+aldex.df.mixed.lab <- left_join(aldex.df.mixed.lab, taxa_info)
+
+# write.csv(aldex.df.mixed.lab, 'C:/Users/aldoa/OneDrive/Desktop/temp_for_dispersion_plot_mixed_lab.csv')
+
+aldex.df.mixed.lab<-read.csv('C:/Users/aldoa/OneDrive/Desktop/temp_for_dispersion_plot_mixed_lab.csv')
+
+aldex.df.mixed.lab<-aldex.df.mixed.lab %>%
+     mutate(color = dplyr::recode(color, `non_sig_color` = "grey50",
+         `pro_color` = "#5ba760", 
+         `actino_color` = "#f09938",
+         `bac_color` = "#5991c3",
+         `firm_color` = "#9593c1",
+         `other_color` = "grey50"))
+
+d<-ggplot(aldex.df.mixed.lab, aes(x=diff.win,y=diff.btw)) +
+  xlab("Dispersion")+ ylab("Difference")+
+  geom_text_repel(aes(label = pointlabel), max.overlaps = 10000) +
+geom_point(aes(size= size, color= color))+
+  scale_color_identity()+
+  scale_size_identity()+
+  theme_cowplot() +  theme(
+  text=element_text(size=18),
+  legend.title = element_text(size=18),
+  legend.text = element_text(size=18),
+  legend.margin = margin(6, 6, 6, 6),legend.box.background = element_rect(color="grey70",size=0.1),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  guides(size = "none") + geom_abline(slope=1, intercept=0, linetype="dashed") + geom_abline(slope=-1, intercept=0, linetype="dashed")
+
+library(ggrepel)
+
+```
+
+uncolonized vs colonized
+```{r}
+aldex_physeq<-prune_samples(sample_data(unsat_removed_physeq)$gno_type != "stock" & sample_data(unsat_removed_physeq)$gno_type != "adult" & sample_data(unsat_removed_physeq)$gno_trt != "mom:field (1:10)" & sample_data(unsat_removed_physeq)$gno_trt != "field 10x", unsat_removed_physeq)
+
+aldex_physeq_field_lab<- prune_samples(sample_data(aldex_physeq)$gno_trt == "un_field" | sample_data(aldex_physeq)$gno_trt == "col_field", aldex_physeq)
+aldex_physeq_field_lab<-prune_taxa(taxa_sums(aldex_physeq_field_lab) > 0, aldex_physeq_field_lab)
+
+# sample_data(aldex_physeq_field_lab)$gno_trt<-factor(sample_data(aldex_physeq_field_lab)$gno_trt, levels=c("col_field", "un_field"))
+# 
+# sample_data(aldex_physeq_field_lab)$gno_trt<- as.character(sample_data(aldex_physeq_field_lab)$gno_trt)
+  
+aldex.clr.asv.field<-aldex.clr(as.data.frame(otu_table(aldex_physeq_field_lab)),
+                             sample_data(aldex_physeq_field_lab)$gno_trt,
+                             mc.samples=128,
+                             denom="all",
+                             verbose=TRUE,
+                             useMC=FALSE)
+
+aldex.clr.asv.field.t.test<-aldex.ttest(aldex.clr.asv.field, paired.test = FALSE, hist.plot = FALSE, verbose = FALSE)
+aldex.clr.asv.field.effect <- aldex.effect(aldex.clr.asv.field, CI=T, verbose=FALSE)
+
+aldex.df.field <- data.frame(aldex.clr.asv.field.t.test,aldex.clr.asv.field.effect)
+
+par(mfrow=c(1,2))
+aldex.plot(aldex.df.field, type="MA", test="welch")
+aldex.plot(aldex.df.field, type="MW", test="welch")
+
+
+aldex.df.field$one_or_two<-"one"
+
+aldex.df.field$one_or_two[which(aldex.df.field$we.eBH < 0.05 & aldex.df.field$wi.eBH < 0.05)] <-"both"
+
+taxa_info <- data.frame(tax_table(aldex_physeq_field_lab))
+taxa_info <- taxa_info %>% rownames_to_column(var = "ASV")
+
+aldex.df.field<-aldex.df.field %>% rownames_to_column(var = "ASV")
+
+aldex.df.field <- left_join(aldex.df.field, taxa_info)
+
+# write.csv(aldex.df.field, 'C:/Users/aldoa/OneDrive/Desktop/temp_for_dispersion_plot_field.csv')
+
+aldex.df.field<-read.csv('C:/Users/aldoa/OneDrive/Desktop/temp_for_dispersion_plot_field.csv')
+
+aldex.df.field<-aldex.df.field %>%
+     mutate(color = dplyr::recode(color, `non_sig_color` = "grey50",
+         `pro_color` = "#5ba760", 
+         `actino_color` = "#f09938",
+         `bac_color` = "#5991c3",
+         `firm_color` = "#9593c1",
+         `other_color` = "grey50"))
+
+e<-ggplot(aldex.df.field, aes(x=diff.win,y=diff.btw)) +
+  xlab("Dispersion")+ ylab("Difference")+
+  geom_text_repel(aes(label = pointlabel), max.overlaps = 10000) +
+geom_point(aes(size= size, color= color))+
+  scale_color_identity()+
+  scale_size_identity()+
+  theme_cowplot() +  theme(
+  text=element_text(size=18),
+  legend.title = element_text(size=18),
+  legend.text = element_text(size=18),
+  legend.margin = margin(6, 6, 6, 6),legend.box.background = element_rect(color="grey70",size=0.1),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  guides(size = "none") + geom_abline(slope=1, intercept=0, linetype="dashed") + geom_abline(slope=-1, intercept=0, linetype="dashed")
+
+library(ggrepel)
+
+```
+
+mixed field conditions - no sig differences!
+```{r}
+aldex_physeq<-prune_samples(sample_data(unsat_removed_physeq)$gno_type != "stock" & sample_data(unsat_removed_physeq)$gno_type != "adult" & sample_data(unsat_removed_physeq)$gno_trt != "mom:field (1:10)" & sample_data(unsat_removed_physeq)$gno_trt != "field 10x", unsat_removed_physeq)
+
+aldex_physeq_field_mixed<- prune_samples(sample_data(aldex_physeq)$gno_trt == "mom:un_field (1:1)" | sample_data(aldex_physeq)$gno_trt == "mom:un_field (10:1)", aldex_physeq)
+aldex_physeq_field_mixed<-prune_taxa(taxa_sums(aldex_physeq_field_mixed) > 0, aldex_physeq_field_mixed)
+
+# sample_data(aldex_physeq_cnv_vs_lab)$gno_trt<-factor(sample_data(aldex_physeq_cnv_vs_lab)$gno_trt, levels=c("lab", "cnv"))
+
+aldex.clr.asv.water.mixed.field<-aldex.clr(as.data.frame(otu_table(aldex_physeq_field_mixed)),
+                             sample_data(aldex_physeq_field_mixed)$gno_trt,
+                             mc.samples=128,
+                             denom="all",
+                             verbose=TRUE,
+                             useMC=FALSE)
+
+aldex.clr.asv.water.mixed.field.t.test<-aldex.ttest(aldex.clr.asv.water.mixed.field, paired.test = FALSE, hist.plot = FALSE, verbose = FALSE)
+aldex.clr.asv.water.mixed.field.t.test.effect <- aldex.effect(aldex.clr.asv.water.mixed.field, CI=T, verbose=FALSE)
+
+aldex.df.mixed.field <- data.frame(aldex.clr.asv.water.mixed.field.t.test,aldex.clr.asv.water.mixed.field.t.test.effect)
+
+par(mfrow=c(1,2))
+aldex.plot(aldex.df.mixed.field, type="MA", test="welch")
+aldex.plot(aldex.df.mixed.field, type="MW", test="welch")
+
+
+aldex.df.mixed.field$one_or_two<-"one"
+
+aldex.df.mixed.field$one_or_two[which(aldex.df.mixed.field$we.eBH < 0.05 & aldex.df.mixed.field$wi.eBH < 0.05)] <-"both"
+
+taxa_info <- data.frame(tax_table(aldex_physeq_field_mixed))
+taxa_info <- taxa_info %>% rownames_to_column(var = "ASV")
+
+aldex.df.mixed.field<-aldex.df.mixed.field %>% rownames_to_column(var = "ASV")
+
+aldex.df.mixed.field <- left_join(aldex.df.mixed.field, taxa_info)
+
+# write.csv(aldex.df.mixed.field, 'C:/Users/aldoa/OneDrive/Desktop/temp_for_dispersion_plot_mixed_field.csv')
+
+aldex.df.mixed.field<-read.csv('C:/Users/aldoa/OneDrive/Desktop/temp_for_dispersion_plot_mixed_field.csv')
+
+aldex.df.mixed.field<-aldex.df.mixed.field %>%
+     mutate(color = dplyr::recode(color, `non_sig_color` = "grey50",
+         `pro_color` = "#5ba760", 
+         `actino_color` = "#f09938",
+         `bac_color` = "#5991c3",
+         `firm_color` = "#9593c1",
+         `other_color` = "grey50"))
+
+f<-ggplot(aldex.df.mixed.field, aes(x=diff.win,y=diff.btw)) +
+  xlab("Dispersion")+ ylab("Difference")+
+  geom_text_repel(aes(label = pointlabel), max.overlaps = 10000) +
+geom_point(aes(size= size, color= color))+
+  scale_color_identity()+
+  scale_size_identity()+
+  theme_cowplot() +  theme(
+  text=element_text(size=18),
+  legend.title = element_text(size=18),
+  legend.text = element_text(size=18),
+  legend.margin = margin(6, 6, 6, 6),legend.box.background = element_rect(color="grey70",size=0.1),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  guides(size = "none") + geom_abline(slope=1, intercept=0, linetype="dashed") + geom_abline(slope=-1, intercept=0, linetype="dashed")
+
+library(ggrepel)
+```
+
+lets save all dispersion plots
+```{r}
+ggsave("mom vs cnv dispersion.pdf",plot=a, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=7,width=7)
+ggsave("mom vs lab dispersion.pdf",plot=b, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=7,width=7)
+ggsave("cnv vs lab dispersion.pdf",plot=c, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=7,width=7)
+ggsave("mixed lab dispersion.pdf",plot=d, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=7,width=7)
+ggsave("uncol vs col field dispersion.pdf",plot=e, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=7,width=7)
+```
+
+Make supp table 10 - all the sig asvs
+```{r}
+aldex.df.cnv.vs.mom
+z<-aldex.df.cnv.vs.mom[which(aldex.df.cnv.vs.mom$one_or_two=="both"),c(2,10,18:23)]
+colnames(z)[2]<- "Conventional vs Parental"
+aldex.df.lab.vs.mom
+y<-aldex.df.lab.vs.mom[which(aldex.df.lab.vs.mom$one_or_two=="both"),c(2,10,18:23)]
+colnames(y)[2] <- "Lab vs Parental"
+aldex.df.lab.vs.cnv
+x<-aldex.df.lab.vs.cnv[which(aldex.df.lab.vs.cnv$one_or_two=="both"),c(2,10,18:23)]
+colnames(x)[2]<-"Lab vs Conventional"
+aldex.df.mixed.lab
+w<-aldex.df.mixed.lab[which(aldex.df.mixed.lab$one_or_two=="both"),c(2,10,18:23)]
+colnames(w)[2] <- "P:L (1:1) vs P:L (10:1)"
+aldex.df.field
+v<-aldex.df.field[which(aldex.df.field$one_or_two=="both"),c(2,10,18:23)]
+colnames(v)[2] <- "Uncolonized vs Colonized"
+z
+y
+x
+w
+v
+merge<-merge(z,y,all=TRUE)
+merge<-merge(merge,x,all=TRUE)
+merge<-merge(merge,w,all=TRUE)
+supp_table_10<-merge(merge,v,all=TRUE)
+# write.csv(supp_table_10,"Supplementary Table 10.csv")
+```
+
+
+
+
+
+
+
+
+
