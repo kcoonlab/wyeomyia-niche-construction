@@ -944,7 +944,10 @@ library(multcompView)
 
 LABELS 
 x
+```
 
+Larval passaging late water cfu
+```{r}
 df_water_cfu<-df %>% filter(Water_Larvae=="water")
 df_water_cfu$Density.CFU.mL.<-as.numeric(df_water_cfu$Density.CFU.mL.)
 
@@ -997,7 +1000,7 @@ library(multcompView)
  LABELS <- generate_label_df(TUKEY , "Treatment")
 
 LABELS 
-
+# ggsave("cfu_larval_passaging.pdf",plot=plot_new, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=7,width=5)
 ```
 
 

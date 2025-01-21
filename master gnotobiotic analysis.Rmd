@@ -1071,6 +1071,48 @@ supp_table_10<-merge(merge,v,all=TRUE)
 ```
 
 
+Testing difference between colonized and uncolonized pitchers surveyed in the field
+```{r}
+new<-read.csv("/Users/aldoa/OneDrive/Desktop/temp field cfu survey.csv")
+
+library(ggplot2)
+library(cowplot)
+
+plot_new<-ggplot(new,aes(x= Treatment  , y=log, fill= Treatment)) + geom_boxplot(lwd=1.25, fatten = 1, alpha=1) +
+    # geom_point(position= position_jitterdodge(jitter.width = 0.3,jitter.height = 0,dodge.width = 0.75, seed = NA),shape = 21, alpha = 0.4, size = 8) +
+    theme_cowplot()+
+   theme(
+     legend.position = 0,
+  text=element_text(size=16),
+  axis.text.x=element_text(angle=90, hjust=1),
+  axis.text= element_text(size=16),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  xlab("Mosquito Background") + ylab("log(CFU/mL)")
+
+qqnorm( residuals(aov(log ~ Treatment, data= new)),pch=1,frame=FALSE)
+qqline( residuals(aov(log ~ Treatment, data= new)),lwd=1)
+plot(fitted(aov(log ~ Treatment, data= new)),
+  residuals(aov(log ~ Treatment, data= new)),xlab="fitted", 
+  ylab= "raw residual",main= "Density by Sample Type")
+  abline(h=0, lty=2)
+  plot(hist(new$log, xlab = "CFU Density"))
+
+# ggsave("cfu_early_field.pdf",plot=plot_new, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=7,width=5)  
+  
+library(car)
+  
+# wilcox.test(log ~ Treatment, data=new) 
+
+
+model=lm( new$log ~ new$Treatment ) # run ANOVA (global test)
+ANOVA=aov(model)
+summary(model)
+
+library(tidyverse)
+library(rstatix)
+stat.test <- new %>%
+  t_test(log ~ Treatment, var.equal = TRUE)
+stat.test
+```
 
 
 

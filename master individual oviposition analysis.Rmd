@@ -94,8 +94,9 @@ binomial_model_survival<-glmer(formula =  1-Died ~ Log_CFU_Eggs + Mom_Wing_Lengt
                    family = binomial)
 summary(binomial_model_survival)
 
-plot(ggemmeans(binomial_model_survival,terms="Log_CFU_Eggs [all]"),show.title= FALSE, line.size=1) + theme_cowplot() + xlab("CFU per mL (log 10)") + ylab("Proportion survival")
+binomial_bivariate_regression<-plot(ggemmeans(binomial_model_survival,terms="Log_CFU_Eggs [all]"),show.title= FALSE, line.size=1) + theme_cowplot() + xlab("CFU per mL (log 10)") + ylab("Proportion survival")
 # more early mom microbes are good for offspring survival
+# ggsave("survival_with_egg_cfu.pdf",plot=binomial_bivariate_regression, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=7,width=5)
 
 binomial_model_pupation<-glmer(formula =  Pupated ~ Log_CFU_Eggs + Mom_Wing_Length_mm + (1|Trial),
                    data = maternal_only,
