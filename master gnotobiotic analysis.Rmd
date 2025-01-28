@@ -243,13 +243,13 @@ META_16S<-sample_data(data_sub)
 unsat_removed_physeq<-phyloseq(META_16S,tax_table(gno_physeq),phy_tree(gno_physeq),otu_table(gno_physeq))
 unsat_removed_physeq<-prune_taxa(taxa_sums(unsat_removed_physeq) > 0, unsat_removed_physeq)
 
-saveRDS(unsat_removed_physeq,"c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/gno_final_unsat_removed")
+# saveRDS(unsat_removed_physeq,"c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/gno_final_unsat_removed")
 unsat_removed_physeq<-readRDS("c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/gno_final_unsat_removed")
 
 p<-ranacapa::ggrare(unsat_removed_physeq, step = 1000, color = "gno_trt", se = FALSE, plot = FALSE)
 p + facet_wrap(~gno_trt) +  geom_line(size=1) + coord_cartesian(xlim =c(0, 2500), ylim = c(0, 120)) + theme_cowplot() + theme(panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank())
 
-sample_data(unsat_removed_physeq)
+# write.csv(sample_data(unsat_removed_physeq),"gnotobiotic_metadata.csv")
 ```
 Microshades
 ```{r}
