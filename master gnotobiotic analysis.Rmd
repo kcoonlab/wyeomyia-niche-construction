@@ -705,6 +705,7 @@ library(ggrepel)
 
 mom vs lab - all
 ```{r}
+library(ALDEx2)
 aldex_physeq<-prune_samples(sample_data(unsat_removed_physeq)$gno_type != "stock" & sample_data(unsat_removed_physeq)$gno_type != "adult" & sample_data(unsat_removed_physeq)$gno_trt != "mom:field (1:10)" & sample_data(unsat_removed_physeq)$gno_trt != "field 10x", unsat_removed_physeq)
 
 aldex_physeq_mom_vs_lab<- prune_samples(sample_data(aldex_physeq)$gno_trt == "mom" | sample_data(aldex_physeq)$gno_trt == "lab", aldex_physeq)
@@ -831,6 +832,18 @@ geom_point(aes(size= size, color= color))+
 
 library(ggrepel)
 
+
+#what is commonly enriched in mom and cnv
+p<-aldex.df.lab.vs.mom$ASV[which(aldex.df.lab.vs.mom$diff.btw>0 & aldex.df.lab.vs.mom$one_or_two=="both")]
+c<-aldex.df.lab.vs.cnv$ASV[which(aldex.df.lab.vs.cnv$diff.btw<0 & aldex.df.lab.vs.cnv$one_or_two=="both")]
+
+x<- list(`Maternal` = p,
+         `Conventional` = c)
+
+library(ggvenn)
+ggvenn(x)
+
+
 ```
 
 p:l (1:1) vs p:l (10:1)
@@ -896,6 +909,16 @@ geom_point(aes(size= size, color= color))+
   panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  guides(size = "none") + geom_abline(slope=1, intercept=0, linetype="dashed") + geom_abline(slope=-1, intercept=0, linetype="dashed")
 
 library(ggrepel)
+
+# in parental and parental 10:1
+p<-aldex.df.lab.vs.mom$ASV[which(aldex.df.lab.vs.mom$diff.btw>0 & aldex.df.lab.vs.mom$one_or_two=="both")]
+c<-aldex.df.mixed.lab$ASV[which(aldex.df.mixed.lab$diff.btw>0 & aldex.df.mixed.lab$one_or_two=="both")]
+
+x<- list(`Maternal` = p,
+         `P:L (10:1)` = c)
+
+library(ggvenn)
+ggvenn(x)
 
 ```
 

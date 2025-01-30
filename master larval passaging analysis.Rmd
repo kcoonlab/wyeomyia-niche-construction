@@ -10,6 +10,7 @@ DELETE THIS
 ```{r}
 seq_object = readRDS("c:/Users/aldoa/OneDrive/Desktop/Larval_Passaging_Analysis_AA/Analysis/gg2 taxonomy/phyloseq/final LP phyloseq")
 sample_data(seq_object)
+# write.csv(as.data.frame(sample_data(seq_object)), "c:/Users/aldoa/OneDrive/Desktop/larval passaging sample detail.csv")
 ```
 
 Raw sequence handling:
@@ -615,6 +616,64 @@ b <- betta(formula = Breakaway.Estimate.of.Richness ~ type_relevel,
 b$table
 
 ```
+
+
+Beta diversity
+```{r}
+sample_data(seq_object)$identifier<-paste(sample_data(seq_object)$Water_Larvae, sample_data(seq_object)$Timepoint, sample_data(seq_object)$Treatment)
+seq_object_no_stock<-prune_samples(sample_data(seq_object)$Water_Larvae != "stock", seq_object)
+new_phy = prune_taxa(taxa_sums(seq_object_no_stock) > 0, seq_object_no_stock)
+ps_clr<-microbiome::transform(new_phy, "clr")      
+
+clr.dist <- dist(t(otu_table(ps_clr)), method="euclidean")
+
+meta<-sample_data(ps_clr)
+meta<-cbind(rownames(meta), data.frame(meta, row.names=NULL))
+colnames(meta)[1] <- "Sample ID"
+
+clr_df_dist<-as.matrix(clr.dist)
+clr_df_dist<-as.data.frame(clr_df_dist)
+clr_df_dist <- cbind(rownames(clr_df_dist), data.frame(clr_df_dist, row.names=NULL))
+colnames(clr_df_dist)[1] <- "Sample ID"
+
+joined<-inner_join(clr_df_dist,meta, by = "Sample ID")
+
+ps.disper_sample_type_clr <- betadisper(clr.dist, joined$identifier)
+
+w<-plot(ps.disper_sample_type_clr)
+
+# plot(ps.disper_sample_type_clr)
+
+disper_test_sample_type_clr<-permutest(ps.disper_sample_type_clr, pairwise = TRUE)
+                                       
+summ<-summary(permustats(disper_test_sample_type_clr))
+summ
+a<-purrr::pluck(summ,'statistic')
+b<-purrr::pluck(summ,'p')
+c<-as.data.frame(a)
+d<-as.data.frame(b)
+rownames(d) = rownames(c)
+rownames(c)
+d <- cbind(rownames(d), data.frame(d, row.names=NULL))
+c <- cbind(rownames(c), data.frame(c, row.names=NULL))
+colnames(c)= c("Comparison","PERMDISP Test Statistic")
+colnames(d)= c("Comparison","PERMDISP p-value")
+FIELD_clr_betadisper_table<-merge(c,d)
+
+library(pairwiseAdonis)
+
+FIELD_clr_adonis_table<-pairwise.adonis(joined[,2:152],joined$identifier)
+vegan::adonis2(joined[,2:152]~ joined$identifier)
+
+
+length(FIELD_clr_adonis_table$pairs)
+
+FIELD_clr_betadisper_table$`PERMDISP adj p-value`<-p.adjust((FIELD_clr_betadisper_table$`PERMDISP p-value`), method = "bonferroni", n = length(FIELD_clr_betadisper_table$`PERMDISP p-value`))
+
+```
+
+
+
 
 Differential abundance testing
 12-day water field vs high
