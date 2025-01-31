@@ -70,7 +70,7 @@ df$Index <- seq(nrow(df))
 ggplot(data=df, aes(x=Index, y=LibrarySize, color=Sample_or_Control)) + geom_point()
 ```
 
-Prevalence-based contaminant assignment  -  performs poorly for this full dataset due to systematic differences in the treatments, using a lower threshold
+Prevalence-based contaminant assignment
 ```{r}
 sample_data(gnoto_clean_me)$is.neg <- sample_data(gnoto_clean_me)$Sample_or_Control == "Control"
 contamdf.prev05 <- isContaminant(gnoto_clean_me, method="prevalence", neg="is.neg", threshold=0.5)
@@ -619,7 +619,6 @@ disper_df<-betadisper_table %>% filter(`PERMDISP p-value (adj)` <0.05)
 
 # write.csv(betadisper_table,'C:/Users/aldoa/OneDrive/Desktop/temp_disper_gno_full.csv')
 ```
-
 
 mom vs cnv subsetting
 ```{r}
