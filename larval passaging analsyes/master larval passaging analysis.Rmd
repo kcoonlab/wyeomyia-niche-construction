@@ -6,11 +6,9 @@ output: html_document
 ---
 
 **Larval passaging data analysis**
-DELETE THIS
+read in file
 ```{r}
 seq_object = readRDS("c:/Users/aldoa/OneDrive/Desktop/Larval_Passaging_Analysis_AA/Analysis/gg2 taxonomy/phyloseq/final LP phyloseq")
-sample_data(seq_object)
-# write.csv(as.data.frame(sample_data(seq_object)), "c:/Users/aldoa/OneDrive/Desktop/larval passaging sample detail.csv")
 ```
 
 Raw sequence handling:
@@ -80,6 +78,7 @@ qiime tools export --input-path unrooted-tree.qza --output-path phyloseq
 # all tsvs will need to be converted to csvs and curated to match expected input coming up for phyloseq...this just entails some minor formatting such as deleting extra rows in the otu table  and the first column of the taxonomy and otu tables being "OTU" 
 # I also manually split the taxonomy levels in the taxonomy file and remove prefixes placed by the database
 ```
+
 
 With .csvs in hand we move to R for the remainder of the analyses
 Here are all the libraries used:
@@ -617,7 +616,6 @@ b$table
 
 ```
 
-
 Beta diversity
 ```{r}
 sample_data(seq_object)$identifier<-paste(sample_data(seq_object)$Water_Larvae, sample_data(seq_object)$Timepoint, sample_data(seq_object)$Treatment)
@@ -671,8 +669,6 @@ length(FIELD_clr_adonis_table$pairs)
 FIELD_clr_betadisper_table$`PERMDISP adj p-value`<-p.adjust((FIELD_clr_betadisper_table$`PERMDISP p-value`), method = "bonferroni", n = length(FIELD_clr_betadisper_table$`PERMDISP p-value`))
 
 ```
-
-
 
 
 Differential abundance testing
@@ -910,6 +906,7 @@ supp_file_6<-merge(supp_file_6_merge,supp_file_6,all=TRUE)
 # changed in excel for organization by comparison and summarization using pivot tables
 ```
 
+
 Change relative to stock
 ```{r}
 transformed_seq_object<-microbiome::transform(seq_object, "clr") 
@@ -1005,6 +1002,7 @@ LABELS
 x
 ```
 
+
 Larval passaging late water cfu
 ```{r}
 df_water_cfu<-df %>% filter(Water_Larvae=="water")
@@ -1061,45 +1059,152 @@ library(multcompView)
 LABELS 
 # ggsave("cfu_larval_passaging.pdf",plot=plot_new, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=7,width=5)
 ```
-
-
-Testing difference between colonized and uncolonized pitchers surveyed in the field
+Density vs survival
 ```{r}
-new<-read.csv("/Users/aldoa/OneDrive/Desktop/temp field cfu survey.csv")
+library("lme4")
+library("ggeffects")
+just_l10_water_late<-prune_samples(sample_data(seq_object)$Timepoint != "48hr" &  sample_data(seq_object)$Treatment == "L10" & sample_data(seq_object)$Water_Larvae == "water", seq_object)
+sample_data(just_l10_water_late)$proportion_survived<-sample_data(just_l10_water_late)$Larvae_End_Total/sample_data(just_l10_water_late)$Larvae_Start
+transformed_just_l10_water_late<-microbiome::transform(just_l10_water_late, "clr")
+ps.melt = psmelt(transformed_just_l10_water_late)
+ps.melt<-ps.melt %>% filter(proportion_survived != "NA")
+ps.melt$transformed<-log10(ps.melt$Density.CFU.mL.)
 
-library(ggplot2)
-library(cowplot)
+binomial_model_CFU<-glmer(formula = proportion_survived ~ transformed + (1|Trial),
+                   data = ps.melt,
+                   weights= Larvae_Start,
+                   family = binomial)
 
-plot_new<-ggplot(new,aes(x= Treatment  , y=log, fill= Treatment)) + geom_boxplot(lwd=1.25, fatten = 1, alpha=1) +
-    # geom_point(position= position_jitterdodge(jitter.width = 0.3,jitter.height = 0,dodge.width = 0.75, seed = NA),shape = 21, alpha = 0.4, size = 8) +
-    theme_cowplot()+
-   theme(
-     legend.position = 0,
-  text=element_text(size=16),
-  axis.text.x=element_text(angle=90, hjust=1),
-  axis.text= element_text(size=16),
-  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  xlab("Mosquito Background") + ylab("log(CFU/mL)")
+summary(binomial_model_CFU)
 
-qqnorm( residuals(aov(log ~ Treatment, data= new)),pch=1,frame=FALSE)
-qqline( residuals(aov(log ~ Treatment, data= new)),lwd=1)
-plot(fitted(aov(log ~ Treatment, data= new)),
-  residuals(aov(log ~ Treatment, data= new)),xlab="fitted", 
-  ylab= "raw residual",main= "Density by Sample Type")
-  abline(h=0, lty=2)
-  plot(hist(new$log, xlab = "CFU Density"))
+plot(ggemmeans(binomial_model_CFU,terms="transformed [all]"),show.title= FALSE, line.size=1) + theme_cowplot() + xlab("Bacterial Density (log10 CFU per mL)") + ylab("Proportion larval survival")
 
-library(car)
-  
-leveneTest(log~Treatment, data = new)
+ps.melt$proportion_final_instar<-ps.melt$Larvae_End_FOURTH/ps.melt$Larvae_Start
+```
 
-model=lm( new$log ~ new$Treatment ) # run ANOVA (global test)
-ANOVA=aov(model)
-summary(model)
 
-library(tidyverse)
-library(rstatix)
-stat.test <- new %>%
-  t_test(log ~ Treatment, var.equal = TRUE)
-stat.test
+ASV associations
+Subsetting for logistic regression
+```{r}
+just_l10_water_early<-prune_samples(sample_data(seq_object)$Timepoint == "48hr" &  sample_data(seq_object)$Treatment == "L10" & sample_data(seq_object)$Water_Larvae == "water", seq_object)
+just_l10_water_late<-prune_samples(sample_data(seq_object)$Timepoint != "48hr" &  sample_data(seq_object)$Treatment == "L10" & sample_data(seq_object)$Water_Larvae == "water", seq_object)
+just_l10_larvae<-prune_samples(sample_data(seq_object)$Treatment == "L10" & sample_data(seq_object)$Water_Larvae != "water", seq_object)
+```
+do early water asvs correlate with proportion survival - none positively!
+```{r}
+############################
+sample_data(just_l10_water_early)$proportion_survived<-sample_data(just_l10_water_early)$Larvae_End_Total/sample_data(just_l10_water_early)$Larvae_Start
+just_l10_water_early = prune_taxa(taxa_sums(just_l10_water_early) > 0, just_l10_water_early)
+tranformed_just_l10_water_early<-microbiome::transform(just_l10_water_early, "clr")
+library(lme4)
+#list of asvs
+list<-rownames(as.data.frame(otu_table(tranformed_just_l10_water_early)))
+ps.melt = psmelt(tranformed_just_l10_water_early)
+ps.melt<-ps.melt %>% filter(proportion_survived != "NA")
+#subset the data
+#  $coefficients [2] and [8]
+# str(temp)
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
+  binomial_model_temp<-glm(formula = proportion_survived ~ Abundance,
+                   data = focal_asv_df,
+                   weights= Larvae_Start,
+                   family = binomial)
+  temp_summary<-summary(binomial_model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[8]
+  count<-count+1
+}
+merge_df<-ps.melt[,c(1,27:33)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+merged_1 <- unique(temp_merge, by = "OTU")
+merged_1$FDR <- p.adjust(merged_1$`Uncorrected p-value`, method = "BH" )
+
+merged_1 %>% filter(FDR<0.05)
+
+################################
+```
+do late water asvs correlate with proportion survival - 7 positive
+```{r}
+sample_data(just_l10_water_late)$proportion_survived<-sample_data(just_l10_water_late)$Larvae_End_Total/sample_data(just_l10_water_late)$Larvae_Start
+just_l10_water_late = prune_taxa(taxa_sums(just_l10_water_late) > 0, just_l10_water_late)
+transformed_just_l10_water_late<-microbiome::transform(just_l10_water_late, "clr")
+# library(lme4)
+#list of asvs
+list<-rownames(as.data.frame(otu_table(transformed_just_l10_water_late)))
+ps.melt = psmelt(transformed_just_l10_water_late)
+ps.melt<-ps.melt %>% filter(proportion_survived != "NA")
+#subset the data
+#  $coefficients [2] and [8]
+# str(temp)]
+# focal_asv_df<- ps.melt %>% filter(OTU == "73b7563f30dc3ad68a861e25ce589c0a")
+# focal_asv_df$transformed<-log10(focal_asv_df$Density.CFU.mL.)
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
+  binomial_model_temp<-glm(formula = proportion_survived ~ Abundance,
+                   data = focal_asv_df,
+                   weights= Larvae_Start,
+                   family = binomial)
+  temp_summary<-summary(binomial_model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[8]
+  count<-count+1
+}
+merge_df<-ps.melt[,c(1,27:33)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+merged_2 <- unique(temp_merge, by = "OTU")
+merged_2$FDR <- p.adjust(merged_2$`Uncorrected p-value`, method = "BH" )
+merged_2 %>% filter(FDR<0.06 & `Model Coefficient` > 0)
+```
+do larvae asvs correlate with proportion survival - 2 positive
+```{r}
+################################
+
+sample_data(just_l10_larvae)$proportion_survived<-sample_data(just_l10_larvae)$Larvae_End_Total/sample_data(just_l10_larvae)$Larvae_Start
+just_l10_larvae = prune_taxa(taxa_sums(just_l10_larvae) > 0, just_l10_larvae)
+transformed_just_l10_larvae<-microbiome::transform(just_l10_larvae, "clr")
+# library(lme4)
+#list of asvs
+list<-rownames(as.data.frame(otu_table(transformed_just_l10_larvae)))
+ps.melt = psmelt(transformed_just_l10_larvae)
+ps.melt<-ps.melt %>% filter(proportion_survived != "NA")
+#subset the data
+#  $coefficients [2] and [8]
+# str(temp)
+
+init<-data.frame()
+count<-1
+for(focal_asv in list) {
+  #subset the data
+  focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
+  binomial_model_temp<-glm(formula = proportion_survived ~ Abundance,
+                   data = focal_asv_df,
+                   weights= Larvae_Start,
+                   family = binomial)
+  temp_summary<-summary(binomial_model_temp)
+  init[count,1]<-focal_asv
+  init[count,2]<-temp_summary$coefficients[2]
+  init[count,3]<-temp_summary$coefficients[8]
+  count<-count+1
+}
+merge_df<-ps.melt[,c(1,27:33)]
+colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
+temp_merge<-merge(merge_df,init)
+merged_3 <- unique(temp_merge, by = "OTU")
+merged_3$FDR <- p.adjust(merged_3$`Uncorrected p-value`, method = "BH" )
+
+merged_3 %>% filter(FDR<0.05 & `Model Coefficient` > 0)
 ```
 
