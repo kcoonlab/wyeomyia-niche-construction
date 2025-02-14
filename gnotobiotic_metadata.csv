@@ -1,0 +1,91 @@
+,Post_Quant,Sample_or_Control,exp,Control_Type,gno_trt,gno_source1,gno_source2,gno_prop_mom,gno_type,gno_well,is.neg
+GNO34,15,Sample,gno,NA,dil_cnv,cnv,NA,NA,pupation water,3,FALSE
+GNO23,21,Sample,gno,NA,un_field 10x,un_field,NA,0,arrested water,5,FALSE
+GNO51,3.61,Sample,gno,NA,dil_cnv,cnv,NA,NA,pupation water,1,FALSE
+GNO94,1.78,Sample,gno,NA,mom:un_field (10:1),mom,un_field,0.9,adult,NA,FALSE
+GNO55,2.9,Sample,gno,NA,dil_cnv,cnv,NA,NA,pupation water,5,FALSE
+GNO15,13,Sample,gno,NA,mom:un_field (1:10),mom,un_field,0.5,pupation water,3,FALSE
+GNO28,40,Sample,gno,NA,lab,lab,NA,0,pupation water,3,FALSE
+GNO83,2.48,Sample,gno,NA,cnv,cnv,NA,NA,pupation water,6,FALSE
+GNO18,8.2,Sample,gno,NA,mom:un_field (1:10),mom,un_field,0.5,pupation water,6,FALSE
+GNO66,3.88,Sample,gno,NA,mom:lab (1:1),mom,lab,0.5,adult,NA,FALSE
+GNO53,4.57,Sample,gno,NA,dil_cnv,cnv,NA,NA,pupation water,3,FALSE
+GNO80,3.79,Sample,gno,NA,cnv,cnv,NA,NA,pupation water,3,FALSE
+GNO13,12,Sample,gno,NA,mom:un_field (1:10),mom,un_field,0.5,pupation water,1,FALSE
+GNO69,0.44,Sample,gno,NA,mom:un_field (1:1),mom,un_field,0.9,adult,NA,FALSE
+GNO50,6.7,Sample,gno,NA,mom:un_field (1:1),mom,un_field,0.9,pupation water,6,FALSE
+GNO42,5.7,Sample,gno,NA,mom:lab (10:1),mom,lab,0.9,pupation water,5,FALSE
+GNO97,3.13,Sample,gno,NA,col_field,col_field,NA,NA,pupation water,3,FALSE
+GNO47,3.22,Sample,gno,NA,mom:un_field (1:1),mom,un_field,0.9,pupation water,4,FALSE
+GNO99,4.16,Sample,gno,NA,col_field,col_field,NA,NA,pupation water,5,FALSE
+GNO3,3.64,Sample,gno,NA,mom,mom,NA,1,pupation water,3,FALSE
+GNO8,15,Sample,gno,NA,mom:lab (1:1),mom,lab,0.5,arrested water,2,FALSE
+GNO27,4.75,Sample,gno,NA,lab,lab,NA,0,arrested water,2,FALSE
+GNO64,1.99,Sample,gno,NA,mom:un_field (1:10),mom,un_field,0.5,adult,NA,FALSE
+GNO35,3.64,Sample,gno,NA,dil_cnv,cnv,NA,NA,pupation water,4,FALSE
+GNO49,5.4,Sample,gno,NA,mom:un_field (1:1),mom,un_field,0.9,pupation water,5,FALSE
+GNO78,3.47,Sample,gno,NA,cnv,cnv,NA,NA,pupation water,1,FALSE
+GNO68,0.732,Sample,gno,NA,mom:lab (10:1),mom,lab,0.9,adult,NA,FALSE
+GNO43,9.5,Sample,gno,NA,mom:lab (10:1),mom,lab,0.9,pupation water,6,FALSE
+GNO73,0.333,Sample,gno,NA,un_field,un_field,NA,0,pupation water,2,FALSE
+GNO76,0.687,Sample,gno,NA,un_field,un_field,NA,0,pupation water,5,FALSE
+GNO6,6.6,Sample,gno,NA,mom,mom,NA,1,pupation water,6,FALSE
+GNO56,2.41,Sample,gno,NA,dil_cnv,cnv,NA,NA,pupation water,6,FALSE
+GNO54,4.06,Sample,gno,NA,dil_cnv,cnv,NA,NA,pupation water,4,FALSE
+GNO31,11,Sample,gno,NA,lab,lab,NA,0,pupation water,6,FALSE
+GNO11,12,Sample,gno,NA,mom:lab (1:1),mom,lab,0.5,pupation water,5,FALSE
+GNO4,4.18,Sample,gno,NA,mom,mom,NA,1,pupation water,4,FALSE
+GNO89,0.179,Sample,gno,NA,mom:un_field (10:1),mom,un_field,0.9,pupation water,6,FALSE
+GNO72,0.197,Sample,gno,NA,un_field,un_field,NA,0,pupation water,1,FALSE
+GNO2,0.861,Sample,gno,NA,mom,mom,NA,1,pupation water,2,FALSE
+GNO20,9.9,Sample,gno,NA,un_field 10x,un_field,NA,0,pupation water,2,FALSE
+GNO25,13,Sample,gno,NA,un_field 10x,un_field,NA,0,arrested water,6,FALSE
+GNO41,14,Sample,gno,NA,mom:lab (10:1),mom,lab,0.9,pupation water,4,FALSE
+GNO36,4.68,Sample,gno,NA,dil_cnv,cnv,NA,NA,pupation water,5,FALSE
+GNO9,9.1,Sample,gno,NA,mom:lab (1:1),mom,lab,0.5,arrested water,3,FALSE
+GNO37,13,Sample,gno,NA,dil_cnv,cnv,NA,NA,pupation water,6,FALSE
+GNO10,19,Sample,gno,NA,mom:lab (1:1),mom,lab,0.5,arrested water,4,FALSE
+GNO65,0.763,Sample,gno,NA,lab,lab,NA,0,adult,NA,FALSE
+GNO57,4.25,Sample,gno,NA,cnv stock,cnv,NA,NA,stock,NA,FALSE
+GNO100,1.35,Sample,gno,NA,col_field,col_field,NA,NA,pupation water,6,FALSE
+GNO30,16,Sample,gno,NA,lab,lab,NA,0,pupation water,5,FALSE
+GNO58,14,Sample,gno,NA,mom stock,mom,NA,NA,stock,NA,FALSE
+GNO59,4.78,Sample,gno,NA,lab stock,lab,NA,NA,stock,NA,FALSE
+GNO19,12,Sample,gno,NA,un_field 10x,un_field,NA,0,arrested water,1,FALSE
+GNO39,17,Sample,gno,NA,mom:lab (10:1),mom,lab,0.9,pupation water,2,FALSE
+GNO45,2.91,Sample,gno,NA,mom:un_field (1:1),mom,un_field,0.9,pupation water,2,FALSE
+GNO91,3.87,Sample,gno,NA,un_field,un_field,NA,0,adult,NA,FALSE
+GNO79,3.97,Sample,gno,NA,cnv,cnv,NA,NA,pupation water,2,FALSE
+GNO22,20,Sample,gno,NA,un_field 10x,un_field,NA,0,arrested water,4,FALSE
+GNO21,25,Sample,gno,NA,un_field 10x,un_field,NA,0,arrested water,3,FALSE
+GNO17,14,Sample,gno,NA,mom:un_field (1:10),mom,un_field,0.5,pupation water,5,FALSE
+GNO16,25,Sample,gno,NA,mom:un_field (1:10),mom,un_field,0.5,pupation water,4,FALSE
+GNO26,23,Sample,gno,NA,lab,lab,NA,0,pupation water,1,FALSE
+GNO1,1.16,Sample,gno,NA,mom,mom,NA,1,pupation water,1,FALSE
+GNO33,10,Sample,gno,NA,dil_cnv,cnv,NA,NA,pupation water,2,FALSE
+GNO84,0.626,Sample,gno,NA,mom:un_field (10:1),mom,un_field,0.9,pupation water,1,FALSE
+GNO96,2.11,Sample,gno,NA,col_field,col_field,NA,NA,pupation water,2,FALSE
+GNO75,0.302,Sample,gno,NA,un_field,un_field,NA,0,pupation water,4,FALSE
+GNO87,0.433,Sample,gno,NA,mom:un_field (10:1),mom,un_field,0.9,pupation water,4,FALSE
+GNO44,2.91,Sample,gno,NA,mom:un_field (1:1),mom,un_field,0.9,pupation water,1,FALSE
+GNO98,2.98,Sample,gno,NA,col_field,col_field,NA,NA,pupation water,4,FALSE
+GNO88,0.488,Sample,gno,NA,mom:un_field (10:1),mom,un_field,0.9,pupation water,5,FALSE
+GNO63,3.11,Sample,gno,NA,dil_cnv,cnv,NA,NA,adult,NA,FALSE
+GNO14,22,Sample,gno,NA,mom:un_field (1:10),mom,un_field,0.5,pupation water,2,FALSE
+GNO5,24,Sample,gno,NA,mom,mom,NA,1,pupation water,5,FALSE
+GNO12,8.3,Sample,gno,NA,mom:lab (1:1),mom,lab,0.5,pupation water,6,FALSE
+GNO46,14,Sample,gno,NA,mom:un_field (1:1),mom,un_field,0.9,pupation water,3,FALSE
+GNO95,0.572,Sample,gno,NA,col_field,col_field,NA,NA,pupation water,1,FALSE
+GNO52,6.4,Sample,gno,NA,dil_cnv,cnv,NA,NA,pupation water,2,FALSE
+GNO38,12,Sample,gno,NA,mom:lab (10:1),mom,lab,0.9,pupation water,1,FALSE
+GNO77,0.468,Sample,gno,NA,un_field,un_field,NA,0,pupation water,6,FALSE
+GNO7,13,Sample,gno,NA,mom:lab (1:1),mom,lab,0.5,arrested water,1,FALSE
+GNO82,1.46,Sample,gno,NA,cnv,cnv,NA,NA,pupation water,5,FALSE
+GNO86,0.285,Sample,gno,NA,mom:un_field (10:1),mom,un_field,0.9,pupation water,3,FALSE
+GNO81,2.15,Sample,gno,NA,cnv,cnv,NA,NA,pupation water,4,FALSE
+GNO85,0.193,Sample,gno,NA,mom:un_field (10:1),mom,un_field,0.9,pupation water,2,FALSE
+GNO60,1.95,Sample,gno,NA,un_field stock,un_field,NA,NA,stock,NA,FALSE
+GNO29,29,Sample,gno,NA,lab,lab,NA,0,pupation water,4,FALSE
+GNO74,1,Sample,gno,NA,un_field,un_field,NA,0,pupation water,3,FALSE
+GNO40,3.38,Sample,gno,NA,mom:lab (10:1),mom,lab,0.9,pupation water,3,FALSE
+GNO32,4.16,Sample,gno,NA,dil_cnv,cnv,NA,NA,pupation water,1,FALSE

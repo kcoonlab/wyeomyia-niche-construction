@@ -1,0 +1,197 @@
+,Start_date,Trial,Microbial_Background,Density,Well,Day_Pupation,micro_den
+1,7/17/2023,1,Parental,Early Field Average,1,14,Parental
+2,7/17/2023,1,Parental,Early Field Average,1,15,Parental
+3,7/17/2023,1,Parental,Early Field Average,1,16,Parental
+4,7/17/2023,1,Parental,Early Field Average,1,16,Parental
+5,7/17/2023,1,Parental,Early Field Average,2,13,Parental
+6,7/17/2023,1,Parental,Early Field Average,2,14,Parental
+7,7/17/2023,1,Parental,Early Field Average,2,16,Parental
+8,7/17/2023,1,Parental,Early Field Average,2,18,Parental
+9,7/17/2023,1,Parental,Early Field Average,2,20,Parental
+10,7/17/2023,1,Parental,Early Field Average,3,13,Parental
+11,7/17/2023,1,Parental,Early Field Average,3,15,Parental
+12,7/17/2023,1,Parental,Early Field Average,3,17,Parental
+13,7/17/2023,1,Parental,Early Field Average,3,17,Parental
+14,7/17/2023,1,Parental,Early Field Average,4,14,Parental
+15,7/17/2023,1,Parental,Early Field Average,4,14,Parental
+16,7/17/2023,1,Parental,Early Field Average,4,15,Parental
+17,7/17/2023,1,Parental,Early Field Average,4,21,Parental
+18,7/17/2023,1,Parental,Early Field Average,4,23,Parental
+19,7/17/2023,1,Parental,Early Field Average,4,27,Parental
+20,7/17/2023,1,Parental,Early Field Average,5,14,Parental
+21,7/17/2023,1,Parental,Early Field Average,5,15,Parental
+22,7/17/2023,1,Parental,Early Field Average,5,15,Parental
+23,7/17/2023,1,Parental,Early Field Average,5,18,Parental
+24,7/17/2023,1,Parental,Early Field Average,6,13,Parental
+25,7/17/2023,1,Parental,Early Field Average,6,14,Parental
+26,7/17/2023,1,Parental,Early Field Average,6,15,Parental
+27,7/17/2023,1,Parental,Early Field Average,6,16,Parental
+28,7/17/2023,1,Parental,Early Field Average,6,20,Parental
+29,7/17/2023,1,Parental,Early Field Average,6,20,Parental
+30,7/17/2023,1,Lab,Early Field Average,1,22,Lab
+31,7/17/2023,1,Lab,Early Field Average,3,25,Lab
+32,7/17/2023,1,Lab,Early Field Average,3,25,Lab
+33,7/17/2023,1,Lab,Early Field Average,4,17,Lab
+34,7/17/2023,1,Lab,Early Field Average,4,22,Lab
+35,7/17/2023,1,Lab,Early Field Average,4,25,Lab
+36,7/17/2023,1,Lab,Early Field Average,5,23,Lab
+37,7/17/2023,1,Lab,Early Field Average,5,25,Lab
+38,7/17/2023,1,Lab,Early Field Average,6,20,Lab
+39,7/17/2023,1,Lab,Early Field Average,6,23,Lab
+40,7/17/2023,1,Lab,Early Field Average,6,24,Lab
+41,7/17/2023,1,Lab,Early Field Average,6,25,Lab
+42,7/17/2023,1,Parental:Lab (1:1),Early Field Average,3,25,Parental:Lab (1:1)
+43,7/17/2023,1,Parental:Lab (1:1),Early Field Average,6,26,Parental:Lab (1:1)
+44,7/23/2023,2,Parental:Lab (10:1),Early Field Average,1,14,Parental:Lab (10:1)
+45,7/23/2023,2,Parental:Lab (10:1),Early Field Average,1,15,Parental:Lab (10:1)
+46,7/23/2023,2,Parental:Lab (10:1),Early Field Average,1,16,Parental:Lab (10:1)
+47,7/23/2023,2,Parental:Lab (10:1),Early Field Average,1,18,Parental:Lab (10:1)
+48,7/23/2023,2,Parental:Lab (10:1),Early Field Average,2,19,Parental:Lab (10:1)
+49,7/23/2023,2,Parental:Lab (10:1),Early Field Average,2,23,Parental:Lab (10:1)
+50,7/23/2023,2,Parental:Lab (10:1),Early Field Average,2,24,Parental:Lab (10:1)
+51,7/23/2023,2,Parental:Lab (10:1),Early Field Average,3,14,Parental:Lab (10:1)
+52,7/23/2023,2,Parental:Lab (10:1),Early Field Average,3,15,Parental:Lab (10:1)
+53,7/23/2023,2,Parental:Lab (10:1),Early Field Average,3,25,Parental:Lab (10:1)
+54,7/23/2023,2,Parental:Lab (10:1),Early Field Average,4,17,Parental:Lab (10:1)
+55,7/23/2023,2,Parental:Lab (10:1),Early Field Average,4,18,Parental:Lab (10:1)
+56,7/23/2023,2,Parental:Lab (10:1),Early Field Average,4,22,Parental:Lab (10:1)
+57,7/23/2023,2,Parental:Lab (10:1),Early Field Average,4,23,Parental:Lab (10:1)
+58,7/23/2023,2,Parental:Lab (10:1),Early Field Average,5,17,Parental:Lab (10:1)
+59,7/23/2023,2,Parental:Lab (10:1),Early Field Average,5,18,Parental:Lab (10:1)
+60,7/23/2023,2,Parental:Lab (10:1),Early Field Average,5,18,Parental:Lab (10:1)
+61,7/23/2023,2,Parental:Lab (10:1),Early Field Average,5,19,Parental:Lab (10:1)
+62,7/23/2023,2,Parental:Lab (10:1),Early Field Average,6,15,Parental:Lab (10:1)
+63,7/23/2023,2,Parental:Lab (10:1),Early Field Average,6,16,Parental:Lab (10:1)
+64,7/23/2023,2,Parental:Lab (10:1),Early Field Average,6,18,Parental:Lab (10:1)
+65,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,1,18,Parental:Uncolonized Field (1:1)
+66,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,1,19,Parental:Uncolonized Field (1:1)
+67,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,1,20,Parental:Uncolonized Field (1:1)
+68,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,1,21,Parental:Uncolonized Field (1:1)
+69,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,1,27,Parental:Uncolonized Field (1:1)
+70,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,2,17,Parental:Uncolonized Field (1:1)
+71,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,2,17,Parental:Uncolonized Field (1:1)
+72,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,2,20,Parental:Uncolonized Field (1:1)
+73,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,3,15,Parental:Uncolonized Field (1:1)
+74,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,3,16,Parental:Uncolonized Field (1:1)
+75,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,3,26,Parental:Uncolonized Field (1:1)
+76,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,4,15,Parental:Uncolonized Field (1:1)
+77,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,4,16,Parental:Uncolonized Field (1:1)
+78,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,4,16,Parental:Uncolonized Field (1:1)
+79,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,4,18,Parental:Uncolonized Field (1:1)
+80,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,4,27,Parental:Uncolonized Field (1:1)
+81,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,5,16,Parental:Uncolonized Field (1:1)
+82,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,5,16,Parental:Uncolonized Field (1:1)
+83,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,5,16,Parental:Uncolonized Field (1:1)
+84,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,5,17,Parental:Uncolonized Field (1:1)
+85,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,5,18,Parental:Uncolonized Field (1:1)
+86,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,5,22,Parental:Uncolonized Field (1:1)
+87,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,6,15,Parental:Uncolonized Field (1:1)
+88,7/23/2023,2,Parental:Uncolonized Field (1:1),Early Field Average,6,15,Parental:Uncolonized Field (1:1)
+89,8/1/2023,3,Uncolonized Field,Early Field Average,1,14,Uncolonized Field
+90,8/1/2023,3,Uncolonized Field,Early Field Average,1,14,Uncolonized Field
+91,8/1/2023,3,Uncolonized Field,Early Field Average,1,15,Uncolonized Field
+92,8/1/2023,3,Uncolonized Field,Early Field Average,2,14,Uncolonized Field
+93,8/1/2023,3,Uncolonized Field,Early Field Average,2,17,Uncolonized Field
+94,8/1/2023,3,Uncolonized Field,Early Field Average,2,19,Uncolonized Field
+95,8/1/2023,3,Uncolonized Field,Early Field Average,3,14,Uncolonized Field
+96,8/1/2023,3,Uncolonized Field,Early Field Average,3,15,Uncolonized Field
+97,8/1/2023,3,Uncolonized Field,Early Field Average,3,15,Uncolonized Field
+98,8/1/2023,3,Uncolonized Field,Early Field Average,3,17,Uncolonized Field
+99,8/1/2023,3,Uncolonized Field,Early Field Average,3,17,Uncolonized Field
+100,8/1/2023,3,Uncolonized Field,Early Field Average,4,14,Uncolonized Field
+101,8/1/2023,3,Uncolonized Field,Early Field Average,4,16,Uncolonized Field
+102,8/1/2023,3,Uncolonized Field,Early Field Average,4,17,Uncolonized Field
+103,8/1/2023,3,Uncolonized Field,Early Field Average,5,13,Uncolonized Field
+104,8/1/2023,3,Uncolonized Field,Early Field Average,5,15,Uncolonized Field
+105,8/1/2023,3,Uncolonized Field,Early Field Average,5,15,Uncolonized Field
+106,8/1/2023,3,Uncolonized Field,Early Field Average,5,17,Uncolonized Field
+107,8/1/2023,3,Uncolonized Field,Early Field Average,5,17,Uncolonized Field
+108,8/1/2023,3,Uncolonized Field,Early Field Average,5,18,Uncolonized Field
+109,8/1/2023,3,Uncolonized Field,Early Field Average,6,14,Uncolonized Field
+110,8/1/2023,3,Uncolonized Field,Early Field Average,6,15,Uncolonized Field
+111,8/1/2023,3,Uncolonized Field,Early Field Average,6,17,Uncolonized Field
+112,8/1/2023,3,Uncolonized Field,Early Field Average,6,19,Uncolonized Field
+113,8/1/2023,3,Uncolonized Field,Early Field Average,6,20,Uncolonized Field
+114,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,1,14,Parental:Uncolonized Field (10:1)
+115,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,1,15,Parental:Uncolonized Field (10:1)
+116,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,1,15,Parental:Uncolonized Field (10:1)
+117,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,1,15,Parental:Uncolonized Field (10:1)
+118,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,1,15,Parental:Uncolonized Field (10:1)
+119,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,1,17,Parental:Uncolonized Field (10:1)
+120,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,1,17,Parental:Uncolonized Field (10:1)
+121,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,2,13,Parental:Uncolonized Field (10:1)
+122,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,2,14,Parental:Uncolonized Field (10:1)
+123,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,2,14,Parental:Uncolonized Field (10:1)
+124,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,2,16,Parental:Uncolonized Field (10:1)
+125,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,2,22,Parental:Uncolonized Field (10:1)
+126,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,3,16,Parental:Uncolonized Field (10:1)
+127,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,3,17,Parental:Uncolonized Field (10:1)
+128,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,3,17,Parental:Uncolonized Field (10:1)
+129,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,3,24,Parental:Uncolonized Field (10:1)
+130,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,3,26,Parental:Uncolonized Field (10:1)
+131,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,4,15,Parental:Uncolonized Field (10:1)
+132,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,4,16,Parental:Uncolonized Field (10:1)
+133,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,4,19,Parental:Uncolonized Field (10:1)
+134,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,4,22,Parental:Uncolonized Field (10:1)
+135,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,4,23,Parental:Uncolonized Field (10:1)
+136,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,5,17,Parental:Uncolonized Field (10:1)
+137,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,5,18,Parental:Uncolonized Field (10:1)
+138,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,6,15,Parental:Uncolonized Field (10:1)
+139,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,6,18,Parental:Uncolonized Field (10:1)
+140,4/25/2024,4,Parental:Uncolonized Field (10:1),Early Field Average,6,20,Parental:Uncolonized Field (10:1)
+141,4/25/2024,4,Colonized Field,Early Field Average,1,16,Colonized Field
+142,4/25/2024,4,Colonized Field,Early Field Average,1,18,Colonized Field
+143,4/25/2024,4,Colonized Field,Early Field Average,1,19,Colonized Field
+144,4/25/2024,4,Colonized Field,Early Field Average,1,21,Colonized Field
+145,4/25/2024,4,Colonized Field,Early Field Average,1,25,Colonized Field
+146,4/25/2024,4,Colonized Field,Early Field Average,2,16,Colonized Field
+147,4/25/2024,4,Colonized Field,Early Field Average,2,17,Colonized Field
+148,4/25/2024,4,Colonized Field,Early Field Average,2,19,Colonized Field
+149,4/25/2024,4,Colonized Field,Early Field Average,2,19,Colonized Field
+150,4/25/2024,4,Colonized Field,Early Field Average,2,19,Colonized Field
+151,4/25/2024,4,Colonized Field,Early Field Average,3,16,Colonized Field
+152,4/25/2024,4,Colonized Field,Early Field Average,3,16,Colonized Field
+153,4/25/2024,4,Colonized Field,Early Field Average,3,17,Colonized Field
+154,4/25/2024,4,Colonized Field,Early Field Average,3,17,Colonized Field
+155,4/25/2024,4,Colonized Field,Early Field Average,3,19,Colonized Field
+156,4/25/2024,4,Colonized Field,Early Field Average,3,22,Colonized Field
+157,4/25/2024,4,Colonized Field,Early Field Average,4,15,Colonized Field
+158,4/25/2024,4,Colonized Field,Early Field Average,4,16,Colonized Field
+159,4/25/2024,4,Colonized Field,Early Field Average,4,17,Colonized Field
+160,4/25/2024,4,Colonized Field,Early Field Average,4,18,Colonized Field
+161,4/25/2024,4,Colonized Field,Early Field Average,4,23,Colonized Field
+162,4/25/2024,4,Colonized Field,Early Field Average,5,14,Colonized Field
+163,4/25/2024,4,Colonized Field,Early Field Average,5,14,Colonized Field
+164,4/25/2024,4,Colonized Field,Early Field Average,5,15,Colonized Field
+165,4/25/2024,4,Colonized Field,Early Field Average,5,19,Colonized Field
+166,4/25/2024,4,Colonized Field,Early Field Average,5,23,Colonized Field
+167,4/25/2024,4,Colonized Field,Early Field Average,5,24,Colonized Field
+168,4/25/2024,4,Colonized Field,Early Field Average,6,16,Colonized Field
+169,4/25/2024,4,Colonized Field,Early Field Average,6,19,Colonized Field
+170,4/25/2024,4,Colonized Field,Early Field Average,6,20,Colonized Field
+171,4/25/2024,4,Colonized Field,Early Field Average,6,22,Colonized Field
+172,4/25/2024,4,CNV,Early Field Average,1,16,CNV
+173,4/25/2024,4,CNV,Early Field Average,1,16,CNV
+174,4/25/2024,4,CNV,Early Field Average,1,16,CNV
+175,4/25/2024,4,CNV,Early Field Average,1,19,CNV
+176,4/25/2024,4,CNV,Early Field Average,1,27,CNV
+177,4/25/2024,4,CNV,Early Field Average,2,14,CNV
+178,4/25/2024,4,CNV,Early Field Average,2,14,CNV
+179,4/25/2024,4,CNV,Early Field Average,2,15,CNV
+180,4/25/2024,4,CNV,Early Field Average,2,17,CNV
+181,4/25/2024,4,CNV,Early Field Average,2,24,CNV
+182,4/25/2024,4,CNV,Early Field Average,3,16,CNV
+183,4/25/2024,4,CNV,Early Field Average,3,16,CNV
+184,4/25/2024,4,CNV,Early Field Average,3,20,CNV
+185,4/25/2024,4,CNV,Early Field Average,3,27,CNV
+186,4/25/2024,4,CNV,Early Field Average,4,15,CNV
+187,4/25/2024,4,CNV,Early Field Average,4,18,CNV
+188,4/25/2024,4,CNV,Early Field Average,4,19,CNV
+189,4/25/2024,4,CNV,Early Field Average,4,25,CNV
+190,4/25/2024,4,CNV,Early Field Average,5,17,CNV
+191,4/25/2024,4,CNV,Early Field Average,5,18,CNV
+192,4/25/2024,4,CNV,Early Field Average,5,19,CNV
+193,4/25/2024,4,CNV,Early Field Average,5,21,CNV
+194,4/25/2024,4,CNV,Early Field Average,6,16,CNV
+195,4/25/2024,4,CNV,Early Field Average,6,16,CNV
+196,4/25/2024,4,CNV,Early Field Average,6,18,CNV

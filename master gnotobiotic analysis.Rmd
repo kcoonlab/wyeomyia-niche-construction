@@ -249,7 +249,7 @@ unsat_removed_physeq<-readRDS("c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analy
 p<-ranacapa::ggrare(unsat_removed_physeq, step = 1000, color = "gno_trt", se = FALSE, plot = FALSE)
 p + facet_wrap(~gno_trt) +  geom_line(size=1) + coord_cartesian(xlim =c(0, 2500), ylim = c(0, 120)) + theme_cowplot() + theme(panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank())
 
-# write.csv(sample_data(unsat_removed_physeq),"gnotobiotic_metadata.csv")
+write.csv(sample_data(unsat_removed_physeq),"gnotobiotic_metadata.csv")
 ```
 Microshades
 ```{r}
@@ -1137,8 +1137,137 @@ stat.test
 ```
 
 
+Fitness analyses
 
+Pupation data frame
+```{r}
+#Pupation statistics:
 
+#generate summary table from observed pupation in 27 day timeframe 
+pupation_observed <- matrix(c(25,59-25, 31,59-31,12, 60-12, 29, 60-29, 2, 60-2, 21, 60-21, 24, 60-24, 27, 60-27, 25, 60-25), nrow = 9, ncol = 2, byrow = T)
+rownames(pupation_observed) <- c('CNV', 'Colonized Field','Lab', 'Parental', 'Parental:Lab(1:1)','Parental:Lab(10:1)','Parental:Uncolonized Field(1:1)','Parental:Uncolonized Field(10:1)', 'Uncolonized Field')
+colnames(pupation_observed) <- c('Pupated', 'Did_not_pupate')
+pupation_observed
+```
 
+Pupation ratio tests
+```{r}
+#Global test of ratios:
+chisq.test(pupation_observed)
+########
 
+pupation_observed_df<-as.data.frame(pupation_observed)
+list_comp<-read.csv("./all_comparisons.csv")
+list_comp<-list_comp[,1:2]
 
+library(tidyverse)
+
+list<-list()
+
+for(i in 1:nrow(list_comp)) {
+  pair_1<- list_comp[i,1]
+  pair_2<- list_comp[i,2]
+  part_1<-pupation_observed_df %>% subset(rownames(pupation_observed_df) %in% pair_1)
+  part_2<-pupation_observed_df %>% subset(rownames(pupation_observed_df) %in% pair_2)
+  name<-paste("new","_",i,sep="")
+  new_temp<-merge(part_1,part_2, all.y=T, all.x=T)
+  rownames(new_temp)<-c(pair_1,pair_2)
+  new_temp<-as.matrix(new_temp)
+  assign(name,new_temp)
+  list[i] <- name
+}
+
+require(Barnard)
+
+barnard.df<-data.frame()
+list_barnard_combos<-c()
+
+for(i in 1:length(list)) {
+  temp<-get(list[[i]])
+  temp_barnard<-barnard.test(temp[1,1],temp[2,1],temp[1,2],temp[2,2])
+  barnard.df[i,1]<-temp_barnard$statistic
+  barnard.df[i,2]<-temp_barnard$p.value[2]
+  barnard.df[i,3]<-p.adjust(temp_barnard$p.value[2], method = "bonferroni", n=22)
+  name_1<-rownames(temp)[1]
+  name_2<-rownames(temp)[2]
+  list_barnard_combos<-append(list_barnard_combos,paste(name_1,name_2))
+  rownames(barnard.df)<-list_barnard_combos
+}
+colnames(barnard.df)<-c("Test Statistic","Unadjust.p","Adj.p")
+barnard.df.sig_pup<-barnard.df %>% filter(Adj.p<0.05)
+```
+
+Survival data frame
+```{r}
+#Survival statistics:
+
+#generate summary table from observed survival in 27 day timeframe 
+survival_observed <- matrix(c(49,10,48,11,28,32,47,13,2,58,38,22,52,8,51,9,53,7), nrow = 9, ncol = 2, byrow = T)
+rownames(survival_observed) <- c('CNV', 'Colonized Field','Lab', 'Parental', 'Parental:Lab(1:1)','Parental:Lab(10:1)','Parental:Uncolonized Field(1:1)','Parental:Uncolonized Field(10:1)', 'Uncolonized Field')
+colnames(survival_observed) <- c('Survived', 'Died')
+survival_observed
+```
+
+Survival ratio
+```{r}
+#Global test of ratios:
+chisq.test(survival_observed)
+########
+
+survival_observed_df<-as.data.frame(survival_observed)
+list_comp<-read.csv("./all_comparisons.csv")
+list_comp<-list_comp[,1:2]
+
+library(tidyverse)
+
+list<-list()
+
+for(i in 1:nrow(list_comp)) {
+  pair_1<- list_comp[i,1]
+  pair_2<- list_comp[i,2]
+  part_1<-survival_observed_df %>% subset(rownames(survival_observed_df) %in% pair_1)
+  part_2<-survival_observed_df %>% subset(rownames(survival_observed_df) %in% pair_2)
+  name<-paste("new","_",i,sep="")
+  new_temp<-merge(part_1,part_2, all.y=T, all.x=T)
+  rownames(new_temp)<-c(pair_1,pair_2)
+  new_temp<-as.matrix(new_temp)
+  assign(name,new_temp)
+  list[i] <- name
+}
+
+require(Barnard)
+
+barnard.df<-data.frame()
+list_barnard_combos<-c()
+
+for(i in 1:length(list)) {
+  temp<-get(list[[i]])
+  temp_barnard<-barnard.test(temp[1,1],temp[2,1],temp[1,2],temp[2,2])
+  barnard.df[i,1]<-temp_barnard$statistic
+  barnard.df[i,2]<-temp_barnard$p.value[2]
+  barnard.df[i,3]<-p.adjust(temp_barnard$p.value[2], method = "bonferroni", n=22)
+  name_1<-rownames(temp)[1]
+  name_2<-rownames(temp)[2]
+  list_barnard_combos<-append(list_barnard_combos,paste(name_1,name_2))
+  rownames(barnard.df)<-list_barnard_combos
+}
+colnames(barnard.df)<-c("Test Statistic","Unadjust.p","Adj.p")
+barnard.df.sig_survival<-barnard.df %>% filter(Adj.p<0.05)
+```
+
+Day of pupation
+```{r}
+pup_day<-read.csv("./pupation_day_gno.csv")
+
+# global test for among group differences
+kruskal.test(Day_Pupation~micro_den,data=pup_day)
+
+# Conservative Dunn's for non-parametric multiple comparisons - transitivity of significant results not assumed
+require(FSA)
+all_multcomp<-dunnTest(Day_Pupation ~ micro_den,
+              data=pup_day,
+              method="bh") 
+all_multcomp<-as.data.frame(all_multcomp[2])
+sig_differences_pupation_day<-all_multcomp%>%filter(res.P.adj<0.05)
+
+```
