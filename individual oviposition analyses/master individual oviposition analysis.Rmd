@@ -25,7 +25,7 @@ library(viridis)
 
 Generate some summary information for the adult females yielding each iso-female assay
 ```{r}
-individual_assays<-read.csv("C:/Users/aldoa/OneDrive/Desktop/Senior thesis/jp for individual oviposition summary draft edit.csv")
+individual_assays<-read.csv("./summary_ovi_data.csv")
 # just subset to moms
 maternal_only<-individual_assays %>% filter(Mom_Wing_Length_mm > 2)
 # reporting the variation in maternal wing length
@@ -106,9 +106,7 @@ summary(binomial_model_pupation)
 #pupation is not predicted by maternal bacterial titers, but better 'quality' females yield offspring more likely to pupate
 
 ### how about when pupation happens? - nope
-day_pupation<-read.csv("C:/Users/aldoa/OneDrive/Desktop/Senior thesis_4_23_2024(1)/Senior thesis/inv_ovi_dev_day_merge_for_maternal_cfu.csv")
-day_pupation<-day_pupation[c(1:95),c(1:2)]
-individual_assays
+day_pupation<-read.csv("./ovi_day_pupation.csv")
 test<-merge(day_pupation,individual_assays)
 
 # need a nested random effect in trial here because the individual offspring in a given iso-female assay may be systematically more similar
@@ -117,14 +115,11 @@ model<-lmerTest::lmer(formula =  pup.day ~ Log_CFU_Eggs + (1|Trial) + (1|Trial:S
 summary(model)
 
 # does how much bacteria at the beginning predict wing length? - no
-gen_2_wings<-read.csv("C:/Users/aldoa/OneDrive/Desktop/Senior thesis_4_23_2024(1)/Senior thesis/jp for individual oviposition gen 2 wings.csv")
-individual_assays
+gen_2_wings<-read.csv("gen_2_wings_ovi.csv")
 test<-merge(gen_2_wings,individual_assays)
 model<-lmerTest::lmer(formula =   Length..mm. ~ Log_CFU_Eggs + (1|Trial) + (1|Trial:Set.ID),
                    data = test)
 summary(model)
-
-
 ```
 
 **Incorporating sequencing data**
@@ -402,7 +397,6 @@ temp<-temp %>% remove_rownames %>% column_to_rownames(var="X")
 # meta_rows<-data.frame(temp, row.names = 1)
 META_16S<-sample_data(temp)
 meta_variable_physeq<-phyloseq(META_16S,phy_tree(unsat_removed_physeq),otu_table(unsat_removed_physeq),tax_table(unsat_removed_physeq))
-# sample_data(meta_variable_physeq)
 ```
 Graphing microshades temp rel abund plot
 ```{r}

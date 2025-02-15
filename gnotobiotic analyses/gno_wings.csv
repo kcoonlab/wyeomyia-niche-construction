@@ -1,0 +1,167 @@
+,date,treatment,density,Well,Sex,Length,Survival
+1,7/17/2023,Lab,early field,1,Male,2.105,4
+2,7/17/2023,Lab,early field,3,Female,2.307,5
+3,7/17/2023,Lab,early field,3,Male,2.097,5
+4,7/17/2023,Lab,early field,4,Female,2.461,4
+5,7/17/2023,Lab,early field,4,Male,2.06,4
+6,7/17/2023,Lab,early field,4,Female,2.404,4
+7,7/17/2023,Lab,early field,4,Female,2.307,4
+8,7/17/2023,Lab,early field,4,Male,2.061,4
+9,7/17/2023,Lab,early field,5,Female,2.348,4
+10,7/17/2023,Lab,early field,5,Male,2.045,4
+11,7/17/2023,Lab,early field,5,Female,2.417,4
+12,7/17/2023,Lab,early field,6,Male,1.902,6
+13,7/17/2023,Lab,early field,6,Female,2.443,6
+14,7/17/2023,Lab,early field,6,Female,2.148,6
+15,7/23/2023,Parental:Lab (10:1),early field,1,Male,2.068,8
+16,7/23/2023,Parental:Lab (10:1),early field,1,Female,2.128,8
+17,7/23/2023,Parental:Lab (10:1),early field,1,Female,2.302,8
+18,7/23/2023,Parental:Lab (10:1),early field,2,Female,2.083,4
+19,7/23/2023,Parental:Lab (10:1),early field,2,Male,2.03,4
+20,7/23/2023,Parental:Lab (10:1),early field,3,Female,2.033,8
+21,7/23/2023,Parental:Lab (10:1),early field,3,Male,1.811,8
+22,7/23/2023,Parental:Lab (10:1),early field,3,Male,1.716,8
+23,7/23/2023,Parental:Lab (10:1),early field,4,Female,2.089,5
+24,7/23/2023,Parental:Lab (10:1),early field,4,Male,2.029,5
+25,7/23/2023,Parental:Lab (10:1),early field,4,Female,2.031,5
+26,7/23/2023,Parental:Lab (10:1),early field,4,Male,1.831,5
+27,7/23/2023,Parental:Lab (10:1),early field,5,Male,2.009,7
+28,7/23/2023,Parental:Lab (10:1),early field,5,Female,2.163,7
+29,7/23/2023,Parental:Lab (10:1),early field,5,Male,2,7
+30,7/23/2023,Parental:Lab (10:1),early field,5,Female,2.22,7
+31,7/23/2023,Parental:Lab (10:1),early field,6,Male,2.046,6
+32,7/23/2023,Parental:Lab (10:1),early field,6,Male,1.864,6
+33,7/23/2023,Parental:Uncolonized Field (1:1),early field,1,Female,2.066,8
+34,7/23/2023,Parental:Uncolonized Field (1:1),early field,1,Male,1.918,8
+35,7/23/2023,Parental:Uncolonized Field (1:1),early field,1,Male,1.67,8
+36,7/23/2023,Parental:Uncolonized Field (1:1),early field,1,Female,1.969,8
+37,7/23/2023,Parental:Uncolonized Field (1:1),early field,2,Male,1.817,9
+38,7/23/2023,Parental:Uncolonized Field (1:1),early field,2,Male,1.893,9
+39,7/23/2023,Parental:Uncolonized Field (1:1),early field,2,Male,1.831,9
+40,7/23/2023,Parental:Uncolonized Field (1:1),early field,3,Male,1.978,9
+41,7/23/2023,Parental:Uncolonized Field (1:1),early field,3,Male,1.862,9
+42,7/23/2023,Parental:Uncolonized Field (1:1),early field,3,Male,1.851,9
+43,7/23/2023,Parental:Uncolonized Field (1:1),early field,4,Male,1.891,8
+44,7/23/2023,Parental:Uncolonized Field (1:1),early field,4,Male,2.125,8
+45,7/23/2023,Parental:Uncolonized Field (1:1),early field,4,Male,2.034,8
+46,7/23/2023,Parental:Uncolonized Field (1:1),early field,4,Male,2.049,8
+47,7/23/2023,Parental:Uncolonized Field (1:1),early field,5,Male,1.773,8
+48,7/23/2023,Parental:Uncolonized Field (1:1),early field,5,Male,1.711,8
+49,7/23/2023,Parental:Uncolonized Field (1:1),early field,5,Female,2.09,8
+50,7/23/2023,Parental:Uncolonized Field (1:1),early field,5,Female,2.063,8
+51,7/23/2023,Parental:Uncolonized Field (1:1),early field,5,Male,1.888,8
+52,7/23/2023,Parental:Uncolonized Field (1:1),early field,5,Male,1.731,8
+53,7/23/2023,Parental:Uncolonized Field (1:1),early field,6,Male,1.731,10
+54,7/23/2023,Parental:Uncolonized Field (1:1),early field,6,Male,1.972,10
+55,8/1/2023,Uncolonized Field,early field,1,Male,1.848,8
+56,8/1/2023,Uncolonized Field,early field,1,Male,1.906,8
+57,8/1/2023,Uncolonized Field,early field,1,Female,1.973,8
+58,8/1/2023,Uncolonized Field,early field,2,Male,2.055,9
+59,8/1/2023,Uncolonized Field,early field,2,Male,1.954,9
+60,8/1/2023,Uncolonized Field,early field,2,Male,1.725,9
+61,8/1/2023,Uncolonized Field,early field,3,Male,1.634,8
+62,8/1/2023,Uncolonized Field,early field,3,Female,1.91,8
+63,8/1/2023,Uncolonized Field,early field,3,Male,1.95,8
+64,8/1/2023,Uncolonized Field,early field,3,Female,1.921,8
+65,8/1/2023,Uncolonized Field,early field,3,Male,2.124,8
+66,8/1/2023,Uncolonized Field,early field,4,Female,1.66,10
+67,8/1/2023,Uncolonized Field,early field,5,Female,2.017,9
+68,8/1/2023,Uncolonized Field,early field,5,Female,2.206,9
+69,8/1/2023,Uncolonized Field,early field,5,Male,2.149,9
+70,8/1/2023,Uncolonized Field,early field,5,Male,1.884,9
+71,8/1/2023,Uncolonized Field,early field,5,Female,2.031,9
+72,8/1/2023,Uncolonized Field,early field,5,Male,2.32,9
+73,8/1/2023,Uncolonized Field,early field,6,Male,2.048,9
+74,8/1/2023,Uncolonized Field,early field,6,Female,2.04,9
+75,8/1/2023,Uncolonized Field,early field,6,Female,1.916,9
+76,8/1/2023,Uncolonized Field,early field,6,Female,2.261,9
+77,8/1/2023,Uncolonized Field,early field,6,Female,2.105,9
+78,7/17/2023,Parental,early field,1,Male,1.987,7
+79,7/17/2023,Parental,early field,1,Female,1.929,7
+80,7/17/2023,Parental,early field,1,Female,2.239,7
+81,7/17/2023,Parental,early field,1,Female,2.079,7
+82,7/17/2023,Parental,early field,2,Female,1.96,9
+83,7/17/2023,Parental,early field,2,Male,1.877,9
+84,7/17/2023,Parental,early field,2,Male,1.854,9
+85,7/17/2023,Parental,early field,3,Female,1.979,8
+86,7/17/2023,Parental,early field,3,Female,1.875,8
+87,7/17/2023,Parental,early field,3,Male,2.06,8
+88,7/17/2023,Parental,early field,4,Female,1.961,9
+89,7/17/2023,Parental,early field,4,Female,2.289,9
+90,7/17/2023,Parental,early field,4,Female,2.105,9
+91,7/17/2023,Parental,early field,4,Male,1.613,9
+92,7/17/2023,Parental,early field,5,Female,1.901,6
+93,7/17/2023,Parental,early field,5,Female,2.227,6
+94,7/17/2023,Parental,early field,5,Male,2.004,6
+95,7/17/2023,Parental,early field,5,Male,2.101,6
+96,7/17/2023,Parental,early field,6,Female,1.995,8
+97,7/17/2023,Parental,early field,6,Male,1.922,8
+98,7/17/2023,Parental,early field,6,Male,2.004,8
+99,7/17/2023,Parental,early field,6,Male,1.986,8
+100,4/25/2024,Conventional,early field,1,Female,2.271,9
+101,4/25/2024,Conventional,early field,1,Female,2.078,9
+102,4/25/2024,Conventional,early field,1,Male,1.686,9
+103,4/25/2024,Conventional,early field,1,Male,2.085,9
+104,4/25/2024,Conventional,early field,1,Male,2.107,9
+105,4/25/2024,Conventional,early field,2,Female,1.925,10
+106,4/25/2024,Conventional,early field,2,Male,1.865,10
+107,4/25/2024,Conventional,early field,3,Female,2.498,8
+108,4/25/2024,Conventional,early field,3,Female,1.99,8
+109,4/25/2024,Conventional,early field,3,Male,2.004,8
+110,4/25/2024,Conventional,early field,3,Male,1.967,8
+111,4/25/2024,Conventional,early field,4,Female,2.21,9
+112,4/25/2024,Conventional,early field,4,Female,2.039,9
+113,4/25/2024,Conventional,early field,4,Male,2.095,9
+114,4/25/2024,Conventional,early field,4,Male,1.779,9
+115,4/25/2024,Conventional,early field,5,Female,2.292,7
+116,4/25/2024,Conventional,early field,5,Female,2.338,7
+117,4/25/2024,Conventional,early field,5,Female,2.299,7
+118,4/25/2024,Conventional,early field,5,Female,2.2,7
+119,4/25/2024,Conventional,early field,6,Male,2.114,6
+120,4/25/2024,Conventional,early field,6,Male,2.206,6
+121,4/25/2024,Parental:Uncolonized Field (10:1),early field,1,Female,1.953,9
+122,4/25/2024,Parental:Uncolonized Field (10:1),early field,1,Male,1.816,9
+123,4/25/2024,Parental:Uncolonized Field (10:1),early field,1,Male,1.905,9
+124,4/25/2024,Parental:Uncolonized Field (10:1),early field,1,Male,1.837,9
+125,4/25/2024,Parental:Uncolonized Field (10:1),early field,1,Male,1.891,9
+126,4/25/2024,Parental:Uncolonized Field (10:1),early field,1,Male,1.877,9
+127,4/25/2024,Parental:Uncolonized Field (10:1),early field,2,Female,1.752,10
+128,4/25/2024,Parental:Uncolonized Field (10:1),early field,2,Male,1.882,10
+129,4/25/2024,Parental:Uncolonized Field (10:1),early field,3,Female,2.168,7
+130,4/25/2024,Parental:Uncolonized Field (10:1),early field,3,Female,1.794,7
+131,4/25/2024,Parental:Uncolonized Field (10:1),early field,3,Male,1.655,7
+132,4/25/2024,Parental:Uncolonized Field (10:1),early field,3,Male,1.886,7
+133,4/25/2024,Parental:Uncolonized Field (10:1),early field,3,Male,1.78,7
+134,4/25/2024,Parental:Uncolonized Field (10:1),early field,4,Female,2.035,9
+135,4/25/2024,Parental:Uncolonized Field (10:1),early field,4,Female,2.077,9
+136,4/25/2024,Parental:Uncolonized Field (10:1),early field,4,Female,1.878,9
+137,4/25/2024,Parental:Uncolonized Field (10:1),early field,4,Male,2.008,9
+138,4/25/2024,Parental:Uncolonized Field (10:1),early field,5,Male,1.68,9
+139,4/25/2024,Parental:Uncolonized Field (10:1),early field,5,Male,1.757,9
+140,4/25/2024,Parental:Uncolonized Field (10:1),early field,6,Female,2.025,7
+141,4/25/2024,Parental:Uncolonized Field (10:1),early field,6,Male,1.94,7
+142,4/25/2024,Colonized Field,early field,1,Female,1.846,8
+143,4/25/2024,Colonized Field,early field,1,Female,2.234,8
+144,4/25/2024,Colonized Field,early field,1,Female,1.974,8
+145,4/25/2024,Colonized Field,early field,1,Male,1.856,8
+146,4/25/2024,Colonized Field,early field,1,Male,1.94,8
+147,4/25/2024,Colonized Field,early field,2,Female,2.421,6
+148,4/25/2024,Colonized Field,early field,2,Female,2.346,6
+149,4/25/2024,Colonized Field,early field,2,Male,1.726,6
+150,4/25/2024,Colonized Field,early field,2,Male,2.146,6
+151,4/25/2024,Colonized Field,early field,2,Male,2.017,6
+152,4/25/2024,Colonized Field,early field,3,Female,2.177,6
+153,4/25/2024,Colonized Field,early field,3,Female,2.114,6
+154,4/25/2024,Colonized Field,early field,3,Female,2.226,6
+155,4/25/2024,Colonized Field,early field,3,Male,2.007,6
+156,4/25/2024,Colonized Field,early field,4,Female,2.087,10
+157,4/25/2024,Colonized Field,early field,4,Female,1.996,10
+158,4/25/2024,Colonized Field,early field,4,Male,1.983,10
+159,4/25/2024,Colonized Field,early field,4,Male,1.934,10
+160,4/25/2024,Colonized Field,early field,5,Female,2.073,8
+161,4/25/2024,Colonized Field,early field,5,Female,1.972,8
+162,4/25/2024,Colonized Field,early field,5,Male,2.026,8
+163,4/25/2024,Colonized Field,early field,5,Male,2.008,8
+164,4/25/2024,Colonized Field,early field,5,Male,2.061,8
+165,4/25/2024,Colonized Field,early field,6,Female,1.922,10
+166,4/25/2024,Colonized Field,early field,6,Female,2.089,10
