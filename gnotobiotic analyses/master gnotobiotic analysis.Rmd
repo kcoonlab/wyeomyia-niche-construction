@@ -1269,7 +1269,6 @@ all_multcomp<-dunnTest(Day_Pupation ~ micro_den,
               method="bh") 
 all_multcomp<-as.data.frame(all_multcomp[2])
 sig_differences_pupation_day<-all_multcomp%>%filter(res.P.adj<0.05)
-
 ```
 
 Wings
