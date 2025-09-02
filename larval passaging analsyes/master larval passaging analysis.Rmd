@@ -8,7 +8,7 @@ output: html_document
 **Larval passaging data analysis**
 read in file
 ```{r}
-seq_object = readRDS("c:/Users/aldoa/OneDrive/Desktop/Larval_Passaging_Analysis_AA/Analysis/gg2 taxonomy/phyloseq/final LP phyloseq")
+seq_object = readRDS("./final LP phyloseq")
 ```
 
 Raw sequence handling:
@@ -304,6 +304,9 @@ seq_object<-prune_samples(sample_data(no_controls)$Treatment != "CONTROL", no_co
 
 saveRDS(seq_object,"[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/final LP phyloseq")
 seq_object = readRDS("[YOUR WORKING DIRECTORY]/qiime_intermediates/phyloseq/final LP phyloseq")
+
+seq_object<-readRDS("./final LP phyloseq")
+sample_data(seq_object)
 ```
 
 What are the dominant taxa present in the dataset?
@@ -942,21 +945,20 @@ facet_names <- c(
                     `12Day` = "12-day"
                     )
 
-x<-ggplot(beta_merge, aes(x= paste, y= Beta.Stock)) + geom_boxplot(lwd=1.5, fatten = 1, outlier.size=4, fill= "white") + 
+x<-ggplot(beta_merge, aes(x= paste, y= Beta.Stock)) + geom_boxplot(lwd=0.5, outlier.shape = NA) + 
   # scale_y_continuous(limits = c(30, 60))+
-  theme_cowplot()+
-  theme(legend.position = "none",
-  axis.line = element_line(colour = 'black', size = 2), axis.text.y = element_text(size = 20),axis.text.x = element_text(size = 20, angle = 45, hjust = 1),
-  axis.ticks.x=element_blank(), axis.title.y = element_text(size = 20), panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank(),
-  
-  strip.text.x = element_text(size = 20))+
-  
-        xlab("") + ylab(expression(beta*"-Diversity Relative to Starting Community (a.u.)")) +
-  # scale_fill_manual(values = saturation(demo_colors, 0.5)) +
+  geom_point(position=position_jitter(width = 0.1, height = NULL, seed = NA) ,shape = 21, size = 1, fill= "black") +
+    theme_cowplot()+
+   theme(
+    legend.position = 0,
+  text=element_text(size=13.5),
+  axis.text= element_text(size=13.5),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank(), axis.text.x=element_blank()) +  xlab("") + ylab(expression(beta*"-Diversity Relative to Starting Community (a.u.)"))+
+  # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
     facet_grid(~Timepoint,scale="free", space = "free", labeller = as_labeller(facet_names)) +
   scale_x_discrete(labels = c("Uncolonized \nwater","Field colonization \nwater","High colonization \nwater","Field colonization \nlarvae","High colonization \nlarvae"))
 
-# ggsave("beta larval passaging.pdf",plot=x, path = "./",device="pdf",dpi=320, height=9,width=9)
+ggsave("beta larval passaging.pdf",plot=x, path = "./",device="pdf",dpi=320, height=4,width=5)
 
 
 qqnorm( residuals(aov(Beta.Stock ~ paste, data= beta_merge)),pch=1,frame=FALSE)
@@ -1005,19 +1007,20 @@ x
 
 Larval passaging late water cfu
 ```{r}
+df<-as.data.frame(as.matrix(sample_data(seq_object)))
 df_water_cfu<-df %>% filter(Water_Larvae=="water")
 df_water_cfu$Density.CFU.mL.<-as.numeric(df_water_cfu$Density.CFU.mL.)
 
 
-plot_new<-ggplot(df_water_cfu,aes(x= Treatment  , y=log10(Density.CFU.mL.), fill= Treatment)) + geom_boxplot(lwd=1.25, fatten = 1, alpha=1) +
-    # geom_point(position= position_jitterdodge(jitter.width = 0.3,jitter.height = 0,dodge.width = 0.75, seed = NA),shape = 21, alpha = 0.4, size = 8) +
+plot_new<-ggplot(df_water_cfu,aes(x= Treatment, y=log10(Density.CFU.mL.), fill= Treatment)) + geom_boxplot(lwd=0.5, outlier.shape = NA) + 
+  geom_point(position=position_jitter(width = 0.1, height = NULL, seed = NA) ,shape = 21, size = 1.5, fill= "black") +
     theme_cowplot()+
    theme(
-     legend.position = 0,
-  text=element_text(size=16),
-  axis.text.x=element_text(angle=90, hjust=1),
-  axis.text= element_text(size=16),
-  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  xlab("Mosquito Background") + ylab("log(CFU/mL)")
+    legend.position = NULL,
+  text=element_text(size=13.5),
+  axis.text= element_text(size=13.5),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank(), axis.text.x=element_blank()) +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) + xlab("Mosquito Background") + ylab("log(CFU/mL)")
 
 
 qqnorm( residuals(aov(log10(Density.CFU.mL.) ~ Treatment, data= df_water_cfu)),pch=1,frame=FALSE)
@@ -1057,8 +1060,9 @@ library(multcompView)
  LABELS <- generate_label_df(TUKEY , "Treatment")
 
 LABELS 
-# ggsave("cfu_larval_passaging.pdf",plot=plot_new, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=7,width=5)
+ggsave("cfu_larval_passaging.pdf",plot=plot_new, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=6,width=4)
 ```
+
 Density vs survival
 ```{r}
 library("lme4")
@@ -1090,6 +1094,7 @@ just_l10_water_early<-prune_samples(sample_data(seq_object)$Timepoint == "48hr" 
 just_l10_water_late<-prune_samples(sample_data(seq_object)$Timepoint != "48hr" &  sample_data(seq_object)$Treatment == "L10" & sample_data(seq_object)$Water_Larvae == "water", seq_object)
 just_l10_larvae<-prune_samples(sample_data(seq_object)$Treatment == "L10" & sample_data(seq_object)$Water_Larvae != "water", seq_object)
 ```
+
 do early water asvs correlate with proportion survival - none positively!
 ```{r}
 ############################
@@ -1110,7 +1115,7 @@ count<-1
 for(focal_asv in list) {
   #subset the data
   focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
-  binomial_model_temp<-glm(formula = proportion_survived ~ Abundance,
+  binomial_model_temp<-lme4::glmer(formula = proportion_survived ~ Abundance + (1|Trial),
                    data = focal_asv_df,
                    weights= Larvae_Start,
                    family = binomial)
@@ -1127,9 +1132,9 @@ merged_1 <- unique(temp_merge, by = "OTU")
 merged_1$FDR <- p.adjust(merged_1$`Uncorrected p-value`, method = "BH" )
 
 merged_1 %>% filter(FDR<0.05)
-
 ################################
 ```
+
 do late water asvs correlate with proportion survival - 7 positive
 ```{r}
 sample_data(just_l10_water_late)$proportion_survived<-sample_data(just_l10_water_late)$Larvae_End_Total/sample_data(just_l10_water_late)$Larvae_Start
@@ -1140,18 +1145,13 @@ transformed_just_l10_water_late<-microbiome::transform(just_l10_water_late, "clr
 list<-rownames(as.data.frame(otu_table(transformed_just_l10_water_late)))
 ps.melt = psmelt(transformed_just_l10_water_late)
 ps.melt<-ps.melt %>% filter(proportion_survived != "NA")
-#subset the data
-#  $coefficients [2] and [8]
-# str(temp)]
-# focal_asv_df<- ps.melt %>% filter(OTU == "73b7563f30dc3ad68a861e25ce589c0a")
-# focal_asv_df$transformed<-log10(focal_asv_df$Density.CFU.mL.)
 
 init<-data.frame()
 count<-1
 for(focal_asv in list) {
   #subset the data
   focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
-  binomial_model_temp<-glm(formula = proportion_survived ~ Abundance,
+  binomial_model_temp<-lme4::glmer(formula = proportion_survived ~ Abundance + (1|Trial),
                    data = focal_asv_df,
                    weights= Larvae_Start,
                    family = binomial)
@@ -1166,7 +1166,7 @@ colnames(init)<-c("OTU","Model Coefficient", "Uncorrected p-value")
 temp_merge<-merge(merge_df,init)
 merged_2 <- unique(temp_merge, by = "OTU")
 merged_2$FDR <- p.adjust(merged_2$`Uncorrected p-value`, method = "BH" )
-merged_2 %>% filter(FDR<0.06 & `Model Coefficient` > 0)
+merged_2 %>% filter(FDR<0.05 & `Model Coefficient` > 0)
 ```
 do larvae asvs correlate with proportion survival - 2 positive
 ```{r}
@@ -1189,7 +1189,7 @@ count<-1
 for(focal_asv in list) {
   #subset the data
   focal_asv_df<-ps.melt %>% filter(OTU==focal_asv)
-  binomial_model_temp<-glm(formula = proportion_survived ~ Abundance,
+  binomial_model_temp<-lme4::glmer(formula = proportion_survived ~ Abundance + (1|Trial),
                    data = focal_asv_df,
                    weights= Larvae_Start,
                    family = binomial)

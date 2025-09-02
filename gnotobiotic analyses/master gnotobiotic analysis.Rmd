@@ -88,6 +88,7 @@ gno_freq<-contamdf.freq[which(contamdf.freq$contaminant=='TRUE'),]
 gno_contaminant_reads<-c(rownames(gno_prev),rownames(gno_freq))
 ps.noncontam <- prune_taxa(!contamdf.freq$contaminant, ps.noncontam)
 ```
+
 Sanity check: how do putative contaminant reads look?
 ```{r}
 # what proportion of reads do putative 'contaminants' comprise?
@@ -181,16 +182,8 @@ tax.clean$Species[i] <- paste("Genus",tax.clean$Genus[i], sep = "_")
 }
 
 tax_table(gno_physeq) <- as.matrix(tax.clean)
-# write.csv(tax.clean,"merge_tax.csv")
-# for viz ease sub-groups of Firmicutes are renamed to Firmicutes at the phylum level, downstream Tax ID is maintained as distinct
-# tax_table<-read.csv("c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/merge taxa.csv")
-
-# tax_rows_fixed<-data.frame(tax_table, row.names = 1)
-# tax_matrix<-as.matrix(tax_rows_fixed)
-# TAX_16S<-tax_table(tax_matrix, errorIfNULL=TRUE)
-# 
-# gno_physeq<-phyloseq(TAX_16S,sample_data(gno_physeq),phy_tree(gno_physeq),otu_table(gno_physeq))
 ```
+
 What are the dominant taxa present in the dataset?
 ```{r}
 phylum_glom<-tax_glom(gno_physeq, taxrank="Phylum", NArm=TRUE, bad_empty=c(NA, "", " ", "\t"))
@@ -244,20 +237,58 @@ unsat_removed_physeq<-phyloseq(META_16S,tax_table(gno_physeq),phy_tree(gno_physe
 unsat_removed_physeq<-prune_taxa(taxa_sums(unsat_removed_physeq) > 0, unsat_removed_physeq)
 
 # saveRDS(unsat_removed_physeq,"c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/gno_final_unsat_removed")
-unsat_removed_physeq<-readRDS("c:/Users/aldoa/OneDrive/Desktop/gnotobiotic analysis new/phyloseq/gno_final_unsat_removed")
+unsat_removed_physeq<-readRDS("./gno_final_unsat_removed")
 
 p<-ranacapa::ggrare(unsat_removed_physeq, step = 1000, color = "gno_trt", se = FALSE, plot = FALSE)
 p + facet_wrap(~gno_trt) +  geom_line(size=1) + coord_cartesian(xlim =c(0, 2500), ylim = c(0, 120)) + theme_cowplot() + theme(panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank())
 
 write.csv(sample_data(unsat_removed_physeq),"gnotobiotic_metadata.csv")
 ```
+
 Microshades
 ```{r}
 library(microshades)
 # install.packages("ggh4x")
 library(ggh4x)
 
-#for purposes of initial viz maybe we do not need  the really small groups probably
+# take a look at stocks, unfortunately field cololonized stock dna extraction failed, plotting only lab stocks 
+temp<-prune_samples(sample_data(unsat_removed_physeq)$gno_type =="stock" & sample_data(unsat_removed_physeq)$gno_trt !="un_field stock",unsat_removed_physeq)
+mdf_prep <- prep_mdf(temp, remove_na = TRUE)
+color_obj <- microshades::create_color_dfs(mdf_prep, group_level= "Phylum", subgroup_level= "Genus", selected_groups = c("Actinobacteriota", "Bacteroidota","Proteobacteria"))
+
+# pick your favorite 5 phyla to look at! I use the information from my initial summarizing above to inform which 5 to choose... or perhaps you are particularly interested in a given group for some reason
+
+mdf <- color_obj$mdf
+cdf <- color_obj$cdf
+
+new_groups <- extend_group(mdf, cdf, "Phylum", "Genus", "Proteobacteria", existing_palette = "micro_purple", new_palette = "micro_cvd_purple", n_add = 5)
+
+mdf <- new_groups$mdf
+cdf <- new_groups$cdf
+
+plot <- plot_microshades(mdf, cdf)
+legend <-custom_legend(mdf, cdf, subgroup_level = "Genus")
+
+facet_labels <- as_labeller(c(
+  "cnv stock" = "Conventional","lab stock" = "Laboratory", "mom stock"= "Parental"))
+
+plot_diff <- plot + scale_y_continuous(labels = scales::percent, expand = expansion(0)) +
+  theme(legend.position = "none")  +
+  theme(axis.text.x = element_text(size= 10)) +
+  facet_nested(~gno_trt, scales = "free_x", labeller= facet_labels) +
+  # theme(axis.text.x = element_text(size= 10)) + 
+  theme(axis.text.x = element_blank() ) +
+  theme(plot.margin = margin(6,20,6,6)) + xlab("Glycerol preserved homogenate") + ggtitle("") + theme(plot.title = element_text(size=11))
+
+stacked_bacteria<-plot_grid(plot_diff, legend,  rel_widths = c(1, .25))
+
+# ggsave("supp figure stocks.pdf",plot=stacked_bacteria, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=5,width=10)
+###################
+```
+
+```{r}
+
+#for purposes of viz maybe we do not need  the really small groups
 
 temp<-prune_samples(sample_data(unsat_removed_physeq)$gno_type !="stock" & sample_data(unsat_removed_physeq)$gno_type !="adult",unsat_removed_physeq)
 temp<-prune_samples(sample_data(temp)$gno_trt !="un_field 10x",temp)
@@ -323,6 +354,7 @@ temp_meta<-temp_meta %>%
 temp_meta$secondary_type<- temp_meta$gno_type
 ```
 
+Rename metadata for table generation
 ```{r}
 temp_meta<-temp_meta %>%
      mutate(secondary_type = dplyr::recode(secondary_type, `pupation water` = "Late larval water",
@@ -349,6 +381,7 @@ unique(temp_meta$gno_trt)
 
 ```
 
+Fixing metadata in physeq object and plotting ordination
 ```{r message=FALSE, warning=FALSE}
 META_ord_16S<-sample_data(temp_meta)
 
@@ -535,59 +568,28 @@ b$table
 GLOBAL: Permanova and permdisp
 ```{r}
 s_clr<-prune_samples(sample_data(viz)$gno_type != "stock" & sample_data(viz)$gno_type != "adult",viz) 
-                     
-                     
-# & sample_data(viz)$gno_trt != "Uncolonized Field"  & sample_data(viz)$gno_trt != "Colonized Field" &  sample_data(viz)$gno_trt != "Parental:Uncolonized Field (1:1)" &  sample_data(viz)$gno_trt != "Parental:Uncolonized Field (10:1)",viz )
-                     
-                     # & sample_data(viz)$gno_trt != "Conventionally Reared",viz)
-
 s_clr<-prune_taxa(taxa_sums(s_clr) > 0, s_clr)
-
-# ps_clr<-microbiome::transform(s_clr, "clr") 
-# ord_clr <- phyloseq::ordinate(ps_clr, "RDA", distance="euclidean")
-# library(viridis)
-# library(viridisLite)
-# temp_ord<-phyloseq::plot_ordination(s_clr, ord_clr, type="samples", color= "gno_trt", shape= "secondary_type") +
-#   stat_ellipse(aes(group=interaction(sample_data(s_clr)$gno_trt,sample_data(s_clr)$secondary_type)),type= "norm", linetype = 2, lwd = 1) +
-#   geom_point(aes(size= 2))+
-#   theme_cowplot() +
-#   # ylab("PC2 [15.3%]") + xlab("PC1 [36.4%]") +
-#   theme(
-#   text=element_text(size=18),
-#   legend.title = element_text(size=18),
-#   legend.text = element_text(size=18),
-#   legend.margin = margin(6, 6, 6, 6),legend.box.background = element_rect(color="grey70",size=0.1),
-#   panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  guides(size = "none") + scale_color_viridis(discrete = TRUE) 
-# 
-# temp_ord$labels$colour <- "Treatment"
-# temp_ord$labels$shape<- "Sample Type"
-
-```
-
-PERMANOVA + PERMDISP
-```{r}
-# s_clr<-prune_taxa(taxa_sums(viz) > 0, viz)
 s_clr<-microbiome::transform(s_clr, "clr")
 clr_dist_matrix <- phyloseq::distance(s_clr, method = "euclidean") 
-
-# sample_data(s_clr)$interaction<-interaction(sample_data(s_clr)$gno_trt,sample_data(s_clr)$gno_type)
-# unique(sample_data(s_clr)$gno_trt)
-
 vegan::adonis2(clr_dist_matrix ~ phyloseq::sample_data(s_clr)$gno_trt)
+```
 
-pair_adonis<-pairwiseAdonis::pairwise.adonis(clr_dist_matrix,sample_data(s_clr)$gno_trt, reduce = NULL)
+pairwise: PERMANOVA + PERMDISP
+```{r}
+# some values unstable at perm = 1000 (default) significance calls more stable at perm = 10000
+set.seed(1)
+###
+pair_adonis<-pairwiseAdonis::pairwise.adonis(clr_dist_matrix,sample_data(s_clr)$gno_trt, reduce = NULL, perm = 10000)
 
 pairs_of_interest<-c("Lab vs Conventionally Reared","Lab vs Parental","Lab vs Parental:Lab (1:1)","Lab vs Parental:Lab (10:1)","Conventionally Reared vs Parental","Parental:Uncolonized Field (1:1) vs Parental","Parental vs Parental:Uncolonized Field (10:1)","Colonized Field vs Uncolonized Field","Parental:Lab (10:1) vs Parental","Parental:Lab (10:1) vs Parental:Lab (1:1)","Parental vs Parental:Lab (1:1)","Conventionally Reared vs Parental:Lab (1:1)","Conventionally Reared vs Parental:Lab (10:1)", "Parental:Uncolonized Field (1:1) vs Uncolonized Field","Parental:Uncolonized Field (1:1) vs Parental:Uncolonized Field (10:1)","Uncolonized Field vs Parental:Uncolonized Field (10:1)")
-
-length(unique(pairs_of_interest))
 
 pair_adonis_sub<-pair_adonis %>% filter(pairs %in% pairs_of_interest)
 
 pair_adonis_sub$p.adjusted<-p.adjust(pair_adonis_sub$p.value,method="bonferroni")
 pair_adonis_sub<-pair_adonis_sub[,-8]
-adonis_df<-pair_adonis_sub %>% filter(p.adjusted<0.05)
 
-write.csv(pair_adonis_sub,'C:/Users/aldoa/OneDrive/Desktop/temp_for_adonis_gno.csv')
+# write.csv(pair_adonis_sub,'C:/Users/aldoa/OneDrive/Desktop/temp_for_adonis_gno.csv')
+###
 
 library(vegan)
 
@@ -1095,20 +1097,20 @@ supp_table_10<-merge(merge,v,all=TRUE)
 
 Testing difference between colonized and uncolonized pitchers surveyed in the field
 ```{r}
-new<-read.csv("/Users/aldoa/OneDrive/Desktop/temp field cfu survey.csv")
+new<-read.csv("./temp field cfu survey.csv")
 
 library(ggplot2)
 library(cowplot)
 
-plot_new<-ggplot(new,aes(x= Treatment  , y=log, fill= Treatment)) + geom_boxplot(lwd=1.25, fatten = 1, alpha=1) +
-    # geom_point(position= position_jitterdodge(jitter.width = 0.3,jitter.height = 0,dodge.width = 0.75, seed = NA),shape = 21, alpha = 0.4, size = 8) +
+plot_new<-ggplot(new,aes(x= Treatment  , y=log, fill= Treatment)) + geom_boxplot(lwd=0.5, outlier.shape = NA) + 
+  # scale_y_continuous(limits = c(30, 60))+
+  geom_point(position=position_jitter(width = 0.1, height = NULL, seed = NA) ,shape = 21, size = 4, fill= "black") +
     theme_cowplot()+
    theme(
-     legend.position = 0,
-  text=element_text(size=16),
-  axis.text.x=element_text(angle=90, hjust=1),
-  axis.text= element_text(size=16),
-  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank()) +  xlab("Mosquito Background") + ylab("log(CFU/mL)")
+    legend.position = NULL,
+  text=element_text(size=13.5),
+  axis.text= element_text(size=13.5),
+  panel.grid.major = element_line(colour = "grey70", size = 0.1), panel.grid.minor = element_blank(), axis.text.x=element_blank()) +  xlab("Mosquito background") + ylab("log(CFU/mL)")
 
 qqnorm( residuals(aov(log ~ Treatment, data= new)),pch=1,frame=FALSE)
 qqline( residuals(aov(log ~ Treatment, data= new)),lwd=1)
@@ -1118,7 +1120,7 @@ plot(fitted(aov(log ~ Treatment, data= new)),
   abline(h=0, lty=2)
   plot(hist(new$log, xlab = "CFU Density"))
 
-# ggsave("cfu_early_field.pdf",plot=plot_new, path = "c:/Users/aldoa/OneDrive/Desktop/",device="pdf",dpi=320, height=7,width=5)  
+ggsave("cfu_early_field.pdf",plot=plot_new, path = "./",device="pdf",dpi=320, height=6,width=4)
   
 library(car)
   
